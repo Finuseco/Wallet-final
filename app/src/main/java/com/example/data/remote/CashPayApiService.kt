@@ -202,6 +202,11 @@ interface CashPayApiService {
     ): Response<com.example.data.model.AgentDepositResponse>
 
     @POST("api/v1/agent/withdraw")
+    suspend fun withdrawAction(
+        @Body request: com.example.data.model.WithdrawActionRequest
+    ): Response<com.example.data.model.WithdrawActionResponse>
+
+    @POST("api/v1/agent/withdraw")
     suspend fun agentWithdraw(
         @Body request: com.example.data.model.AgentWithdrawRequest
     ): Response<com.example.data.model.AgentWithdrawResponse>
