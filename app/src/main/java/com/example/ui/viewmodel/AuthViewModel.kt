@@ -35,7 +35,7 @@ enum class AuthStep {
 data class AuthUiState(
     val authMethod: AuthMethod = AuthMethod.PHONE,
     val selectedCountry: CountryDto = CountryDto("CD", "République démocratique du Congo", "+243"),
-    val localPhone: String = "800001234",
+    val localPhone: String = "000000000",
     val walletId: String = "",
     val countries: List<CountryDto> = emptyList(),
     val isCountryPickerOpen: Boolean = false,
