@@ -1,0 +1,223 @@
+package com.example.data.remote
+
+import com.example.data.model.CountriesResponse
+import com.example.data.model.LoginRequest
+import com.example.data.model.LoginResponse
+import com.example.data.model.MeResponse
+import com.example.data.model.RegisterRequest
+import com.example.data.model.RegisterResponse
+import com.example.data.model.WalletResponse
+import com.example.data.model.TransfersMetaResponse
+import com.example.data.model.TransferRequest
+import com.example.data.model.TransferResponse
+import com.example.data.model.TransactionsResponse
+import com.example.data.model.NotificationsResponse
+import com.example.data.model.MarkReadResponse
+import com.example.data.model.MarkReadAllResponse
+import com.example.data.model.SendOtpRequest
+import com.example.data.model.SendOtpResponse
+import com.example.data.model.UpdateProfileRequest
+import com.example.data.model.VerifyOtpRequest
+import com.example.data.model.VerifyOtpResponse
+import com.example.data.model.VerifyPinRequest
+import com.example.data.model.VerifyPinResponse
+import retrofit2.Response
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.POST
+import retrofit2.http.Path
+import retrofit2.http.Query
+
+interface CashPayApiService {
+
+    @GET("api/v1/countries")
+    suspend fun getCountries(): Response<CountriesResponse>
+
+    @POST("api/v1/auth/login")
+    suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
+
+    @POST("api/v1/auth/otp/send")
+    suspend fun sendOtp(@Body request: SendOtpRequest): Response<SendOtpResponse>
+
+    @POST("api/v1/auth/otp/verify")
+    suspend fun verifyOtp(@Body request: VerifyOtpRequest): Response<VerifyOtpResponse>
+
+    @POST("api/v1/auth/pin/verify")
+    suspend fun verifyPin(@Body request: VerifyPinRequest): Response<VerifyPinResponse>
+
+    @GET("api/v1/auth/me")
+    suspend fun getMe(@Query("phone") phone: String): Response<MeResponse>
+
+    @PATCH("api/v1/auth/me")
+    suspend fun updateMe(
+        @Query("phone") phone: String,
+        @Body request: UpdateProfileRequest
+    ): Response<MeResponse>
+
+    @POST("api/v1/auth/register")
+    suspend fun register(@Body request: RegisterRequest): Response<RegisterResponse>
+
+    @GET("api/v1/wallet")
+    suspend fun getWallet(@Query("userId") userId: Long): Response<WalletResponse>
+
+    @GET("api/v1/transfers")
+    suspend fun getTransfersMeta(@Query("userId") userId: Long): Response<TransfersMetaResponse>
+
+    @POST("api/v1/transfers")
+    suspend fun transfer(@Body request: TransferRequest): Response<TransferResponse>
+
+    @GET("api/v1/transactions")
+    suspend fun getTransactions(
+        @Query("userId") userId: Long,
+        @Query("limit") limit: Int? = 50,
+        @Query("offset") offset: Int? = 0,
+        @Query("from") from: String? = null,
+        @Query("to") to: String? = null,
+        @Query("direction") direction: String? = null
+    ): Response<TransactionsResponse>
+
+    @GET("api/v1/notifications")
+    suspend fun getNotifications(
+        @Query("limit") limit: Int? = 20
+    ): Response<NotificationsResponse>
+
+    @POST("api/v1/notifications/{id}/read")
+    suspend fun markNotificationRead(
+        @Path("id") id: Long
+    ): Response<MarkReadResponse>
+
+    @POST("api/v1/notifications/read-all")
+    suspend fun markAllNotificationsRead(): Response<MarkReadAllResponse>
+
+    // --- CARDS API ---
+    @GET("api/v1/cards/catalog")
+    suspend fun getCardCatalog(): Response<com.example.data.model.CardCatalogResponse>
+
+    @GET("api/v1/cards")
+    suspend fun getUserCards(): Response<okhttp3.ResponseBody>
+
+    @POST("api/v1/cards/purchase")
+    suspend fun purchaseCard(@Body request: com.example.data.model.PurchaseCardRequest): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/activate")
+    suspend fun activateCard(@Path("id") id: String): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/freeze")
+    suspend fun freezeCard(@Path("id") id: String): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/unfreeze")
+    suspend fun unfreezeCard(@Path("id") id: String): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/pin")
+    suspend fun changeCardPin(
+        @Path("id") id: String,
+        @Body request: Map<String, String> // {"pin": "1234"}
+    ): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/terminate")
+    suspend fun terminateCard(@Path("id") id: String): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/funding")
+    suspend fun updateCardFunding(
+        @Path("id") id: String,
+        @Body request: com.example.data.model.FundingConfigRequest
+    ): Response<com.example.data.model.CardActionResponse>
+
+    @POST("api/v1/cards/{id}/reveal")
+    suspend fun revealCardDetails(
+        @Path("id") id: String,
+        @Body request: Map<String, String> // {"pin": "1234"}
+    ): Response<com.example.data.model.CardDetailsResponse>
+
+    @GET("api/v1/profile/by-phone")
+    suspend fun searchProfileByPhone(
+        @Query("phone") phone: String
+    ): Response<com.example.data.model.PublicProfileResponse>
+
+    @GET("api/v1/withdrawals")
+    suspend fun previewWithdrawal(
+        @Query("method") method: String,
+        @Query("amount") amount: Double,
+        @Query("currency") currency: String,
+        @Query("operator") operator: String? = null
+    ): Response<com.example.data.model.WithdrawalPreviewResponse>
+
+    @POST("api/v1/withdrawals")
+    suspend fun confirmWithdrawal(
+        @Body request: com.example.data.model.WithdrawalConfirmRequest
+    ): Response<com.example.data.model.WithdrawalConfirmResponse>
+
+    // --- LOANS API ---
+    @GET("api/v1/loans/offer")
+    suspend fun getLoanOffer(
+        @Query("currency") currency: String
+    ): Response<com.example.data.model.LoanOfferResponse>
+
+    @GET("api/v1/loans/current")
+    suspend fun getLoanCurrent(): Response<com.example.data.model.LoanCurrentResponse>
+
+    @GET("api/v1/loans/history")
+    suspend fun getLoanHistory(): Response<com.example.data.model.LoanHistoryResponse>
+
+    @POST("api/v1/loans/request")
+    suspend fun requestLoan(
+        @Body request: com.example.data.model.LoanRequest
+    ): Response<com.example.data.model.LoanRequestResponse>
+
+    @POST("api/v1/loans/repay")
+    suspend fun repayLoan(
+        @Body request: com.example.data.model.LoanRepayRequest
+    ): Response<com.example.data.model.LoanRepayResponse>
+
+    @POST("api/v1/loans/repay-installment")
+    suspend fun repayLoanInstallment(
+        @Body request: com.example.data.model.LoanRepayInstallmentRequest
+    ): Response<com.example.data.model.LoanRepayInstallmentResponse>
+
+    // --- FORGOT PIN & AGENT ACTIVATION ENDPOINTS ---
+    @POST("api/v1/auth/forgot-pin/request")
+    suspend fun forgotPinRequest(
+        @Body request: com.example.data.model.ForgotPinRequestDto
+    ): Response<com.example.data.model.ForgotPinRequestResponse>
+
+    @POST("api/v1/auth/forgot-pin/verify")
+    suspend fun forgotPinVerify(
+        @Body request: com.example.data.model.ForgotPinVerifyDto
+    ): Response<com.example.data.model.ForgotPinVerifyResponse>
+
+    @POST("api/v1/auth/forgot-pin/reset")
+    suspend fun forgotPinReset(
+        @Body request: com.example.data.model.ForgotPinResetDto
+    ): Response<com.example.data.model.ForgotPinResetResponse>
+
+    @POST("api/v1/agent/activate")
+    suspend fun activateAgent(
+        @Body request: com.example.data.model.ActivateAgentRequest
+    ): Response<com.example.data.model.ActivateAgentResponse>
+
+    @POST("api/v1/agent/deposit")
+    suspend fun agentDeposit(
+        @Body request: com.example.data.model.AgentDepositRequest
+    ): Response<com.example.data.model.AgentDepositResponse>
+
+    @POST("api/v1/agent/withdraw")
+    suspend fun agentWithdraw(
+        @Body request: com.example.data.model.AgentWithdrawRequest
+    ): Response<com.example.data.model.AgentWithdrawResponse>
+
+    @GET("api/v1/agent/loan-target")
+    suspend fun getAgentLoanTarget(
+        @Query("clientRef") clientRef: String
+    ): Response<com.example.data.model.AgentLoanTargetResponse>
+
+    @POST("api/v1/agent/loan-repay")
+    suspend fun agentLoanRepay(
+        @Body request: com.example.data.model.AgentLoanRepaymentRequest
+    ): Response<com.example.data.model.AgentLoanRepaymentResponse>
+
+    @POST("api/v1/agent/transfer-commission")
+    suspend fun transferCommission(
+        @Body request: com.example.data.model.AgentCommissionTransferRequest
+    ): Response<com.example.data.model.AgentCommissionTransferResponse>
+}
