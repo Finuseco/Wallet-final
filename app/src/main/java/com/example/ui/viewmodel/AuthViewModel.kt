@@ -25,6 +25,7 @@ enum class AuthMethod {
 enum class AuthStep {
     IDENTIFICATION,
     REGISTER_FORM,
+    REGISTER_SUCCESS,
     OTP_CHANNEL_SELECT,
     OTP_VERIFICATION,
     PROFILE_INSTALLATION,
@@ -54,6 +55,19 @@ data class AuthUiState(
     val isPinLoading: Boolean = false,
     val isRegisterLoading: Boolean = false,
     val isInstallingProfile: Boolean = false,
+
+    // Registration Success Info from Backend
+    val registrationSuccessWalletId: String? = null,
+    val registrationSuccessFullName: String? = null,
+    val registrationSuccessPhone: String? = null,
+    val registrationSuccessToken: String? = null,
+
+    // Email OTP verification state
+    val isEmailOtpSending: Boolean = false,
+    val isEmailOtpVerifying: Boolean = false,
+    val isEmailVerified: Boolean = false,
+    val emailOtpError: String? = null,
+    val emailOtpSuccess: String? = null,
 
     val installProgressPercent: Int = 0,
     val installStageText: String = "Initialisation du système...",
@@ -468,6 +482,7 @@ class AuthViewModel(
         val previous = when (current) {
             AuthStep.IDENTIFICATION -> AuthStep.IDENTIFICATION
             AuthStep.REGISTER_FORM -> AuthStep.IDENTIFICATION
+            AuthStep.REGISTER_SUCCESS -> AuthStep.IDENTIFICATION
             AuthStep.OTP_CHANNEL_SELECT -> AuthStep.IDENTIFICATION
             AuthStep.OTP_VERIFICATION -> AuthStep.OTP_CHANNEL_SELECT
             AuthStep.PROFILE_INSTALLATION -> AuthStep.OTP_VERIFICATION
@@ -485,7 +500,56 @@ class AuthViewModel(
     }
 
     fun onRawEmailChanged(email: String) {
-        _uiState.update { it.copy(rawEmail = email) }
+        _uiState.update { it.copy(rawEmail = email, isEmailVerified = false, emailOtpError = null, emailOtpSuccess = null) }
+    }
+
+    fun sendRegisterEmailOtp(email: String) {
+        if (email.isBlank()) return
+        _uiState.update { it.copy(isEmailOtpSending = true, emailOtpError = null, emailOtpSuccess = null) }
+        viewModelScope.launch {
+            val res = repository.registerSendEmailOtp(email.trim())
+            res.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isEmailOtpSending = false,
+                        emailOtpSuccess = resp.message ?: "Code OTP envoyé à votre adresse e-mail.",
+                        emailOtpError = null
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isEmailOtpSending = false,
+                        emailOtpError = err.message ?: "Impossible d'envoyer le code OTP e-mail."
+                    )
+                }
+            }
+        }
+    }
+
+    fun verifyRegisterEmailOtp(email: String, otp: String) {
+        if (email.isBlank() || otp.isBlank()) return
+        _uiState.update { it.copy(isEmailOtpVerifying = true, emailOtpError = null) }
+        viewModelScope.launch {
+            val res = repository.registerVerifyEmailOtp(email.trim(), otp.trim())
+            res.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isEmailOtpVerifying = false,
+                        isEmailVerified = true,
+                        emailOtpSuccess = "E-mail validé avec succès !",
+                        emailOtpError = null
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isEmailOtpVerifying = false,
+                        emailOtpError = err.message ?: "Code OTP e-mail invalide."
+                    )
+                }
+            }
+        }
     }
 
     fun resetToLogin() {
@@ -504,61 +568,63 @@ class AuthViewModel(
         lastName: String,
         gender: String,
         birthDate: String,
-        birthPlace: String,
+        maritalStatus: String,
         nationality: String,
-        province: String,
         city: String,
         address: String,
         profession: String,
-        activityDescription: String,
-        incomePerMonth: String,
         idType: String,
         idNumber: String,
         companyName: String,
         idFrontBase64: String?,
-        idBackBase64: String?,
         profilePhotoBase64: String?,
-        signatureBase64: String?
+        signatureBase64: String?,
+        language: String = "fr"
     ) {
         val state = _uiState.value
         _uiState.update { it.copy(isRegisterLoading = true, errorMessage = null) }
 
         viewModelScope.launch {
             val req = com.example.data.model.RegisterRequest(
-                action = "submit_registration",
+                action = "complete",
                 phone = state.fullPhone,
                 countryCode = state.selectedCountry.code,
-                accountType = accountType,
-                email = state.rawEmail.ifBlank { null },
-                firstName = firstName,
-                middleName = middleName,
-                lastName = lastName,
-                birthDate = birthDate,
-                birthPlace = birthPlace,
-                gender = gender,
-                nationality = nationality,
                 country = state.selectedCountry.name,
-                province = province,
-                city = city,
-                address = address,
-                profession = profession,
-                activityDescription = activityDescription,
-                incomePerMonth = incomePerMonth.toDoubleOrNull(),
-                idType = idType,
-                idNumber = idNumber,
+                accountType = accountType,
+                language = language,
+                companyName = if (accountType == "business") companyName.ifBlank { null } else null,
+                firstName = firstName.ifBlank { null },
+                middleName = middleName.ifBlank { null },
+                lastName = lastName.ifBlank { null },
+                gender = gender.ifBlank { null },
+                birthDate = birthDate.ifBlank { null },
+                maritalStatus = maritalStatus.ifBlank { null },
+                nationality = nationality.ifBlank { state.selectedCountry.code },
+                email = state.rawEmail.ifBlank { null },
+                city = city.ifBlank { null },
+                address = address.ifBlank { null },
+                profession = profession.ifBlank { null },
+                idType = idType.ifBlank { null },
+                idNumber = idNumber.ifBlank { null },
                 idFrontImage = idFrontBase64,
-                idBackImage = idBackBase64,
                 profilePhoto = profilePhotoBase64,
-                signatureImage = signatureBase64,
-                companyName = companyName.ifBlank { null }
+                signatureImage = signatureBase64
             )
 
-            val res = repository.register(req)
+            val res = repository.registerComplete(req)
             res.onSuccess { resp ->
+                val returnedWalletId = resp.effectiveWalletId ?: "CD${System.currentTimeMillis().toString().takeLast(10)}"
+                val returnedFullName = resp.effectiveFullName ?: "$firstName $lastName".trim()
+
                 _uiState.update {
                     it.copy(
                         isRegisterLoading = false,
-                        authStep = AuthStep.OTP_CHANNEL_SELECT,
+                        registrationSuccessWalletId = returnedWalletId,
+                        registrationSuccessFullName = returnedFullName,
+                        registrationSuccessPhone = state.fullPhone,
+                        registrationSuccessToken = resp.token,
+                        walletId = returnedWalletId,
+                        authStep = AuthStep.REGISTER_SUCCESS,
                         errorMessage = null
                     )
                 }
@@ -570,6 +636,17 @@ class AuthViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun finishRegistrationToLogin() {
+        _uiState.update {
+            it.copy(
+                authStep = AuthStep.IDENTIFICATION,
+                authMethod = AuthMethod.WALLET_ID,
+                walletId = it.registrationSuccessWalletId ?: it.walletId,
+                errorMessage = null
+            )
         }
     }
 

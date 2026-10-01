@@ -204,16 +204,16 @@ class CashPayRepository(
             if (response.isSuccessful && response.body() != null) {
                 val body = response.body()!!
                 val token = body.token
-                if (!token.isNullOrBlank()) {
+                if (!token.isNullOrBlank() && (body.action == "complete" || body.idWallet != null || body.user != null)) {
                     com.example.data.remote.ApiClient.sessionToken = token
-                    val existingSession = dao.getSessionOnce()
+                    val wallet = body.effectiveWalletId
                     dao.saveSession(
                         SessionEntity(
                             id = 1,
                             userId = body.user?.id ?: 1,
-                            walletId = body.idWallet,
-                            phone = body.phone,
-                            isAuthenticated = false,
+                            walletId = wallet,
+                            phone = body.user?.phone ?: body.phone,
+                            isAuthenticated = true,
                             biometricEnabled = true,
                             sessionToken = token
                         )
@@ -227,6 +227,26 @@ class CashPayRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun registerStart(phone: String, accountType: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "start", phone = phone, accountType = accountType))
+    }
+
+    suspend fun registerVerifyPhone(phone: String, countryCode: String, country: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
+    }
+
+    suspend fun registerSendEmailOtp(email: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "send_email_otp", email = email))
+    }
+
+    suspend fun registerVerifyEmailOtp(email: String, otp: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "verify_email", email = email, otp = otp))
+    }
+
+    suspend fun registerComplete(request: RegisterRequest): Result<RegisterResponse> {
+        return register(request.copy(action = "complete"))
     }
 
     suspend fun sendOtp(userId: Long, channel: String): Result<SendOtpResponse> {

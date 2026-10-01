@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                         AppStartupState.SPLASH -> {
                             SplashScreen(
                                 onAnimationFinished = {
-                                    val hasSeenOnboarding = prefs.getBoolean("has_seen_onboarding_v3", false)
+                                    val hasSeenOnboarding = prefs.getBoolean("has_seen_onboarding_v4", false)
                                     startupState = if (!hasSeenOnboarding) {
                                         AppStartupState.ONBOARDING
                                     } else {
@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
                         AppStartupState.ONBOARDING -> {
                             InstallationGuideScreen(
                                 onFinished = {
-                                    prefs.edit().putBoolean("has_seen_onboarding_v3", true).apply()
+                                    prefs.edit().putBoolean("has_seen_onboarding_v4", true).apply()
                                     startupState = AppStartupState.APP
                                 }
                             )
@@ -156,7 +156,7 @@ fun CashPayAppRoot(
                         uiState = authState
                     )
                 }
-                AuthStep.REGISTER_FORM -> {
+                AuthStep.REGISTER_FORM, AuthStep.REGISTER_SUCCESS -> {
                     RegisterAccountScreen(
                         viewModel = authViewModel,
                         uiState = authState

@@ -205,48 +205,74 @@ data class RegisterRequest(
     @Json(name = "action") val action: String,
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "countryCode") val countryCode: String? = null,
+    @Json(name = "country") val country: String? = null,
     @Json(name = "account_type") val accountType: String? = null,
-    @Json(name = "email") val email: String? = null,
-    @Json(name = "otp") val otp: String? = null,
+    @Json(name = "language") val language: String? = "fr",
+    @Json(name = "company_name") val companyName: String? = null,
     @Json(name = "first_name") val firstName: String? = null,
     @Json(name = "middle_name") val middleName: String? = null,
     @Json(name = "last_name") val lastName: String? = null,
-    @Json(name = "birth_date") val birthDate: String? = null,
-    @Json(name = "birth_place") val birthPlace: String? = null,
     @Json(name = "gender") val gender: String? = null,
+    @Json(name = "birth_date") val birthDate: String? = null,
+    @Json(name = "marital_status") val maritalStatus: String? = null,
     @Json(name = "nationality") val nationality: String? = null,
-    @Json(name = "country") val country: String? = null,
-    @Json(name = "province") val province: String? = null,
+    @Json(name = "email") val email: String? = null,
+    @Json(name = "otp") val otp: String? = null,
     @Json(name = "city") val city: String? = null,
     @Json(name = "address") val address: String? = null,
     @Json(name = "profession") val profession: String? = null,
-    @Json(name = "activity_description") val activityDescription: String? = null,
-    @Json(name = "income_per_month") val incomePerMonth: Double? = null,
     @Json(name = "id_type") val idType: String? = null,
     @Json(name = "id_number") val idNumber: String? = null,
     @Json(name = "id_front_image") val idFrontImage: String? = null,
-    @Json(name = "id_back_image") val idBackImage: String? = null,
     @Json(name = "profile_photo") val profilePhoto: String? = null,
     @Json(name = "signature_image") val signatureImage: String? = null,
-    @Json(name = "company_name") val companyName: String? = null
+    @Json(name = "representative") val representative: RepresentativeDto? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class RegisterUserDto(
+    @Json(name = "id") val id: Long? = null,
+    @Json(name = "id_wallet") val idWallet: String? = null,
+    @Json(name = "walletId") val walletId: String? = null,
+    @Json(name = "full_name") val fullName: String? = null,
+    @Json(name = "firstName") val firstName: String? = null,
+    @Json(name = "lastName") val lastName: String? = null,
+    @Json(name = "phone") val phone: String? = null,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "account_type") val accountType: String? = null
+) {
+    val effectiveWalletId: String
+        get() = idWallet ?: walletId ?: ""
+    val effectiveFullName: String
+        get() = fullName ?: "${firstName.orEmpty()} ${lastName.orEmpty()}".trim()
+}
 
 @JsonClass(generateAdapter = true)
 data class RegisterResponse(
     @Json(name = "success") val success: Boolean,
     @Json(name = "action") val action: String? = null,
     @Json(name = "phone") val phone: String? = null,
+    @Json(name = "countryCode") val countryCode: String? = null,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "account_type") val accountType: String? = null,
     @Json(name = "email") val email: String? = null,
     @Json(name = "emailVerificationRequired") val emailVerificationRequired: Boolean? = null,
     @Json(name = "phoneVerificationRequired") val phoneVerificationRequired: Boolean? = null,
     @Json(name = "phoneVerified") val phoneVerified: Boolean? = null,
     @Json(name = "emailVerified") val emailVerified: Boolean? = null,
+    @Json(name = "next") val next: String? = null,
     @Json(name = "id_wallet") val idWallet: String? = null,
+    @Json(name = "idWallet") val idWalletAlt: String? = null,
     @Json(name = "token") val token: String? = null,
-    @Json(name = "user") val user: UserProfileDto? = null,
+    @Json(name = "user") val user: RegisterUserDto? = null,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
-)
+) {
+    val effectiveWalletId: String?
+        get() = idWallet ?: idWalletAlt ?: user?.effectiveWalletId
+    val effectiveFullName: String?
+        get() = user?.effectiveFullName
+}
 
 @JsonClass(generateAdapter = true)
 data class WalletInfoDto(
