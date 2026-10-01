@@ -151,7 +151,16 @@ class AuthViewModel(
                             userId = session.userId,
                             walletId = session.walletId ?: it.walletId,
                             rawPhone = session.phone ?: it.rawPhone,
-                            authStep = AuthStep.COMPLETED
+                            authStep = if (session.isAuthenticated) AuthStep.COMPLETED else AuthStep.PIN_ENTRY
+                        )
+                    }
+                } else if (session == null) {
+                    com.example.data.remote.ApiClient.sessionToken = null
+                    _uiState.update {
+                        AuthUiState(
+                            countries = it.countries,
+                            selectedCountry = it.selectedCountry,
+                            authStep = AuthStep.IDENTIFICATION
                         )
                     }
                 }

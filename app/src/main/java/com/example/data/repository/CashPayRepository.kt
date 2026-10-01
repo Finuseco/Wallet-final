@@ -367,8 +367,14 @@ class CashPayRepository(
     }
 
     suspend fun logout() {
+        try {
+            wsClient.disconnect()
+        } catch (_: Exception) {}
+        com.example.data.remote.ApiClient.sessionToken = null
         dao.clearSession()
         dao.clearUserProfile()
+        dao.clearTransactions()
+        dao.clearNotifications()
     }
 
     private fun mapProfileDtoToEntity(p: UserProfileDto): UserProfileEntity {
@@ -1027,19 +1033,63 @@ class CashPayRepository(
         }
     }
 
-    suspend fun agentDeposit(clientRef: String, amount: Double, currency: String, pin: String): Result<com.example.data.model.AgentDepositResponse> {
+    suspend fun executeAgentDeposit(request: com.example.data.model.AgentDepositRequest): Result<com.example.data.model.AgentDepositResponse> {
         return try {
-            val req = com.example.data.model.AgentDepositRequest(clientRef = clientRef, amount = amount, currency = currency, pin = pin)
-            val response = apiService.agentDeposit(req)
+            val response = apiService.agentDeposit(request)
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
-                val msg = extractErrorMessage(response.errorBody()?.string(), "Dépôt Agent impossible.")
-                Result.failure(Exception(msg))
+                val rawError = response.errorBody()?.string()
+                val parsedError = try {
+                    if (!rawError.isNullOrBlank() && rawError.trim().startsWith("{")) {
+                        val json = JSONObject(rawError)
+                        val errMsg = json.optString("error", json.optString("message", "Opération de dépôt impossible."))
+                        val previewObj = json.optJSONObject("preview")
+                        val preview = if (previewObj != null) {
+                            com.example.data.model.AgentDepositPreviewDto(
+                                amount = if (previewObj.has("amount")) previewObj.optDouble("amount") else null,
+                                fee = previewObj.optDouble("fee", 0.0),
+                                totalDebit = if (previewObj.has("totalDebit")) previewObj.optDouble("totalDebit") else null,
+                                balance = if (previewObj.has("balance")) previewObj.optDouble("balance") else null,
+                                missingAmount = if (previewObj.has("missingAmount")) previewObj.optDouble("missingAmount") else null,
+                                currency = previewObj.optString("currency", request.currency ?: "CDF"),
+                                message = previewObj.optString("message", errMsg)
+                            )
+                        } else null
+
+                        com.example.data.model.AgentDepositResponse(
+                            success = false,
+                            error = errMsg,
+                            preview = preview,
+                            step = if (json.has("step")) json.optString("step") else request.step,
+                            nextStep = if (json.has("nextStep")) json.optString("nextStep") else request.step
+                        )
+                    } else null
+                } catch (_: Exception) { null }
+
+                if (parsedError != null) {
+                    Result.success(parsedError)
+                } else {
+                    val msg = extractErrorMessage(rawError, "Opération de dépôt impossible.")
+                    Result.failure(Exception(msg))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun agentDeposit(clientRef: String, amount: Double, currency: String, pin: String): Result<com.example.data.model.AgentDepositResponse> {
+        return executeAgentDeposit(
+            com.example.data.model.AgentDepositRequest(
+                step = "pin",
+                clientWalletId = clientRef,
+                clientRef = clientRef,
+                amount = amount,
+                currency = currency,
+                pin = pin
+            )
+        )
     }
 
     suspend fun initiateAgentWithdraw(clientRef: String, amount: Double, currency: String, channel: String): Result<com.example.data.model.AgentWithdrawResponse> {
@@ -1113,20 +1163,32 @@ class CashPayRepository(
         }
     }
 
-    suspend fun agentTransferCommission(
+    suspend fun getAgentCommissions(): Result<com.example.data.model.AgentCommissionsResponse> {
+        return try {
+            val response = apiService.getAgentCommissions()
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de récupérer les commissions.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun transferAgentCommission(
         currency: String,
         amount: Double,
-        pin: String,
-        transferAll: Boolean
+        pin: String
     ): Result<com.example.data.model.AgentCommissionTransferResponse> {
         return try {
             val req = com.example.data.model.AgentCommissionTransferRequest(
                 currency = currency,
                 amount = amount,
-                pin = pin,
-                transferAll = transferAll
+                pin = pin
             )
-            val response = apiService.transferCommission(req)
+            val response = apiService.transferAgentCommission(req)
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {

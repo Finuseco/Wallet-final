@@ -197,13 +197,22 @@ data class DashboardUiState(
     val isSweepingCommission: Boolean = false,
     val sweepCommissionError: String? = null,
     val sweepCommissionSuccess: String? = null,
-    // Agent Deposit
+    val agentCommissionsMap: Map<String, Double> = emptyMap(),
+    val agentBalancesMap: Map<String, Double> = emptyMap(),
+    // Agent Deposit (Multi-step flow)
+    val agentDepositStep: String = "identify", // "identify", "confirm_client", "amount", "pin", "completed"
     val agentDepositClientRef: String = "",
+    val agentDepositFoundClient: com.example.data.model.AgentDepositClientDto? = null,
+    val agentDepositAgentBalances: Map<String, Double> = emptyMap(),
     val agentDepositAmount: String = "",
-    val agentDepositCurrency: String = "USD",
+    val agentDepositCurrency: String = "CDF",
     val agentDepositPin: String = "",
     val isAgentDepositLoading: Boolean = false,
     val agentDepositError: String? = null,
+    val agentDepositPreview: com.example.data.model.AgentDepositPreviewDto? = null,
+    val agentDepositDetail: com.example.data.model.AgentDepositDetailDto? = null,
+    val agentDepositSuccessDetail: com.example.data.model.AgentDepositDetailDto? = null,
+    val agentDepositFinancialDetails: com.example.data.model.AgentDepositResponse? = null,
     val agentDepositSuccess: com.example.data.model.AgentDepositResponse? = null,
     // Agent Withdraw (Demande & Confirmation OTP Client)
     val agentWithdrawStep: Int = 1, // 1: Demande (Client, Montant, Canal SMS/WhatsApp), 2: Confirmation OTP Client
@@ -250,6 +259,11 @@ class DashboardViewModel(
                     fetchNotifications()
                     fetchUserCards()
                     fetchCardCatalog()
+                    loadAgentCommissions()
+                } else if (session == null || !session.isAuthenticated) {
+                    _uiState.value = DashboardUiState(
+                        isDarkMode = _uiState.value.isDarkMode
+                    )
                 }
             }
         }
@@ -1835,12 +1849,33 @@ class DashboardViewModel(
                 sweepCommissionError = null,
                 sweepCommissionSuccess = null,
                 agentDepositError = null,
+                agentDepositPreview = null,
                 agentDepositSuccess = null,
                 agentWithdrawError = null,
                 agentWithdrawSuccess = null,
                 agentLoanRepayError = null,
                 agentLoanRepaySuccess = null
             )
+        }
+        loadAgentCommissions()
+    }
+
+    fun loadAgentCommissions() {
+        viewModelScope.launch {
+            val result = repository.getAgentCommissions()
+            result.onSuccess { res ->
+                val balances = res.balances ?: emptyMap()
+                val comms = res.commissionBalance ?: emptyMap()
+                _uiState.update { state ->
+                    state.copy(
+                        agentBalancesMap = balances,
+                        agentCommissionsMap = comms,
+                        agentCommissionUsd = comms["USD"] ?: state.agentCommissionUsd,
+                        agentCommissionCdf = comms["CDF"] ?: state.agentCommissionCdf,
+                        agentCommissionEur = comms["EUR"] ?: state.agentCommissionEur
+                    )
+                }
+            }
         }
     }
 
@@ -1949,11 +1984,10 @@ class DashboardViewModel(
         _uiState.update { it.copy(isSweepingCommission = true, sweepCommissionError = null) }
 
         viewModelScope.launch {
-            val result = repository.agentTransferCommission(
+            val result = repository.transferAgentCommission(
                 currency = curr,
                 amount = amountToSweep,
-                pin = state.sweepPin,
-                transferAll = state.sweepIsAll
+                pin = state.sweepPin
             )
 
             result.onSuccess { res ->
@@ -2041,51 +2075,261 @@ class DashboardViewModel(
         }
     }
 
-    // --- AGENT DEPOSIT ---
+    // --- AGENT DEPOSIT (MULTI-STEP PROTOCOL) ---
     fun setAgentDepositClientRef(ref: String) {
-        _uiState.update { it.copy(agentDepositClientRef = ref, agentDepositError = null) }
+        _uiState.update {
+            it.copy(
+                agentDepositClientRef = ref,
+                agentDepositError = null,
+                agentDepositPreview = null,
+                agentDepositFoundClient = if (it.agentDepositStep != "identify") null else it.agentDepositFoundClient,
+                agentDepositStep = if (it.agentDepositStep != "identify" && it.agentDepositStep != "completed") "identify" else it.agentDepositStep
+            )
+        }
+    }
+
+    fun prefillClientFromPublicProfileOrScanner(clientRef: String) {
+        _uiState.update {
+            it.copy(
+                agentDepositClientRef = clientRef,
+                agentDepositError = null,
+                agentDepositPreview = null,
+                agentDepositStep = "identify"
+            )
+        }
+        searchAndIdentifyClientForDeposit()
+    }
+
+    fun searchAndIdentifyClientForDeposit() {
+        val clientRef = _uiState.value.agentDepositClientRef.trim()
+        if (clientRef.isBlank()) {
+            _uiState.update { it.copy(agentDepositError = "Veuillez entrer le numéro de téléphone ou Wallet ID du client.") }
+            return
+        }
+
+        _uiState.update { it.copy(isAgentDepositLoading = true, agentDepositError = null, agentDepositPreview = null) }
+
+        viewModelScope.launch {
+            val isPhone = clientRef.all { it.isDigit() || it == '+' }
+            val req = com.example.data.model.AgentDepositRequest(
+                step = "identify",
+                clientWalletId = clientRef,
+                phone = if (isPhone) clientRef else null,
+                clientRef = clientRef
+            )
+
+            val result = repository.executeAgentDeposit(req)
+            result.onSuccess { res ->
+                if (res.success && res.client != null) {
+                    val clientRole = res.client.role?.lowercase()
+                    if (clientRole == "agent") {
+                        _uiState.update {
+                            it.copy(
+                                isAgentDepositLoading = false,
+                                agentDepositError = "Le portefeuille indiqué appartient à un agent. Les dépôts ne peuvent être effectués que vers un compte client.",
+                                agentDepositFoundClient = null
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isAgentDepositLoading = false,
+                                agentDepositStep = "confirm_client",
+                                agentDepositFoundClient = res.client,
+                                agentDepositError = null
+                            )
+                        }
+                    }
+                } else {
+                    // Fallback to public profile search by phone/ref
+                    val profileRes = repository.searchProfileByPhone(clientRef)
+                    profileRes.onSuccess { pubResp ->
+                        val profile = pubResp.profile
+                        if (profile != null) {
+                            if (profile.role?.lowercase() == "agent") {
+                                _uiState.update {
+                                    it.copy(
+                                        isAgentDepositLoading = false,
+                                        agentDepositError = "Le portefeuille indiqué appartient à un agent. Les dépôts ne peuvent être effectués que vers un compte client.",
+                                        agentDepositFoundClient = null
+                                    )
+                                }
+                            } else {
+                                val clientDto = com.example.data.model.AgentDepositClientDto(
+                                    walletId = profile.walletId,
+                                    phone = clientRef,
+                                    fullName = profile.fullName,
+                                    role = profile.role,
+                                    profilePhotoUrl = profile.profilePhotoUrl ?: profile.profilePhoto
+                                )
+                                _uiState.update {
+                                    it.copy(
+                                        isAgentDepositLoading = false,
+                                        agentDepositStep = "confirm_client",
+                                        agentDepositFoundClient = clientDto,
+                                        agentDepositError = null
+                                    )
+                                }
+                            }
+                        } else {
+                            _uiState.update {
+                                it.copy(
+                                    isAgentDepositLoading = false,
+                                    agentDepositError = res.error ?: "Client introuvable."
+                                )
+                            }
+                        }
+                    }.onFailure {
+                        _uiState.update {
+                            it.copy(
+                                isAgentDepositLoading = false,
+                                agentDepositError = res.error ?: "Client introuvable."
+                            )
+                        }
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentDepositLoading = false,
+                        agentDepositError = err.message ?: "Client introuvable."
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmClientForDeposit() {
+        val client = _uiState.value.agentDepositFoundClient
+        val walletId = client?.walletId ?: _uiState.value.agentDepositClientRef.trim()
+        if (walletId.isBlank()) {
+            _uiState.update { it.copy(agentDepositError = "Client requis.") }
+            return
+        }
+
+        _uiState.update { it.copy(isAgentDepositLoading = true, agentDepositError = null) }
+
+        viewModelScope.launch {
+            val req = com.example.data.model.AgentDepositRequest(
+                step = "confirm_client",
+                clientWalletId = walletId
+            )
+            val result = repository.executeAgentDeposit(req)
+            result.onSuccess { res ->
+                if (res.success) {
+                    val returnedBalances = res.agentBalances ?: _uiState.value.agentBalancesMap
+                    val availableCurrencies = returnedBalances.keys.toList().ifEmpty { listOf("USD", "CDF") }
+                    val currentSelected = _uiState.value.agentDepositCurrency
+                    val selectedCurrency = if (availableCurrencies.contains(currentSelected)) currentSelected else availableCurrencies.first()
+
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositStep = "amount",
+                            agentDepositAgentBalances = returnedBalances,
+                            agentDepositCurrency = selectedCurrency,
+                            agentDepositError = null
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositError = res.error ?: "Impossible de confirmer le client."
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentDepositLoading = false,
+                        agentDepositError = err.message ?: "Erreur de confirmation."
+                    )
+                }
+            }
+        }
     }
 
     fun setAgentDepositAmount(amount: String) {
-        _uiState.update { it.copy(agentDepositAmount = amount, agentDepositError = null) }
+        _uiState.update { it.copy(agentDepositAmount = amount, agentDepositError = null, agentDepositPreview = null) }
     }
 
     fun setAgentDepositCurrency(currency: String) {
-        _uiState.update { it.copy(agentDepositCurrency = currency, agentDepositError = null) }
+        _uiState.update { it.copy(agentDepositCurrency = currency, agentDepositError = null, agentDepositPreview = null) }
+    }
+
+    fun submitAmountForDeposit() {
+        val state = _uiState.value
+        val walletId = state.agentDepositFoundClient?.walletId ?: state.agentDepositClientRef.trim()
+        val amount = state.agentDepositAmount.toDoubleOrNull() ?: 0.0
+        val currency = state.agentDepositCurrency
+
+        if (amount <= 0.0) {
+            _uiState.update { it.copy(agentDepositError = "Montant invalide.") }
+            return
+        }
+        if (currency.isBlank()) {
+            _uiState.update { it.copy(agentDepositError = "Devise requise.") }
+            return
+        }
+
+        _uiState.update { it.copy(isAgentDepositLoading = true, agentDepositError = null, agentDepositPreview = null) }
+
+        viewModelScope.launch {
+            val req = com.example.data.model.AgentDepositRequest(
+                step = "amount",
+                clientWalletId = walletId,
+                currency = currency,
+                amount = amount
+            )
+            val result = repository.executeAgentDeposit(req)
+            result.onSuccess { res ->
+                if (res.success && res.deposit != null) {
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositStep = "pin",
+                            agentDepositDetail = res.deposit,
+                            agentDepositPin = "",
+                            agentDepositError = null,
+                            agentDepositPreview = null
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositPreview = res.preview,
+                            agentDepositError = res.error ?: "Solde agent insuffisant."
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentDepositLoading = false,
+                        agentDepositError = err.message ?: "Erreur lors de la validation du montant."
+                    )
+                }
+            }
+        }
     }
 
     fun setAgentDepositPin(pin: String) {
         _uiState.update { it.copy(agentDepositPin = pin, agentDepositError = null) }
     }
 
-    fun resetAgentDeposit() {
-        _uiState.update {
-            it.copy(
-                agentDepositClientRef = "",
-                agentDepositAmount = "",
-                agentDepositPin = "",
-                agentDepositError = null,
-                agentDepositSuccess = null,
-                isAgentDepositLoading = false
-            )
-        }
+    fun submitAgentDeposit(userId: Long = 1) {
+        submitPinForDeposit(userId)
     }
 
-    fun submitAgentDeposit(userId: Long = 1) {
+    fun submitPinForDeposit(userId: Long = 1) {
         val state = _uiState.value
-        val clientRef = state.agentDepositClientRef.trim()
+        val walletId = state.agentDepositFoundClient?.walletId ?: state.agentDepositClientRef.trim()
         val amount = state.agentDepositAmount.toDoubleOrNull() ?: 0.0
         val currency = state.agentDepositCurrency
         val pin = state.agentDepositPin.trim()
 
-        if (clientRef.isBlank()) {
-            _uiState.update { it.copy(agentDepositError = "Veuillez entrer le numéro ou Wallet ID du client.") }
-            return
-        }
-        if (amount <= 0.0) {
-            _uiState.update { it.copy(agentDepositError = "Veuillez entrer un montant valide.") }
-            return
-        }
         if (pin.length != 4) {
             _uiState.update { it.copy(agentDepositError = "Le code PIN agent doit contenir 4 chiffres.") }
             return
@@ -2094,45 +2338,80 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentDepositLoading = true, agentDepositError = null) }
 
         viewModelScope.launch {
-            val result = repository.agentDeposit(clientRef, amount, currency, pin)
+            val req = com.example.data.model.AgentDepositRequest(
+                step = "pin",
+                clientWalletId = walletId,
+                currency = currency,
+                amount = amount,
+                pin = pin
+            )
+            val result = repository.executeAgentDeposit(req)
             result.onSuccess { res ->
-                val earnedComm = res.commission ?: (amount * 0.01)
-                val newUsdComm = if (currency == "USD") state.agentCommissionUsd + earnedComm else state.agentCommissionUsd
-                val newCdfComm = if (currency == "CDF") state.agentCommissionCdf + earnedComm else state.agentCommissionCdf
-                val newEurComm = if (currency == "EUR") state.agentCommissionEur + earnedComm else state.agentCommissionEur
-
-                val op = com.example.data.model.AgentOperationRecord(
-                    type = "DEPOSIT",
-                    title = "Dépôt Client Espèces",
-                    clientRef = clientRef,
-                    amount = amount,
-                    currency = currency,
-                    commission = earnedComm,
-                    reference = res.reference ?: "DEP-${System.currentTimeMillis() % 100000}",
-                    date = "Aujourd'hui, ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}",
-                    status = "Complété"
-                )
-
-                _uiState.update {
-                    it.copy(
-                        isAgentDepositLoading = false,
-                        agentDepositSuccess = res,
-                        agentDepositError = null,
-                        agentCommissionUsd = newUsdComm,
-                        agentCommissionCdf = newCdfComm,
-                        agentCommissionEur = newEurComm,
-                        agentOperationsHistory = listOf(op) + it.agentOperationsHistory
+                if (res.success && (res.status == "completed" || res.step == "pin" || res.nextStep == null)) {
+                    val clientName = res.deposit?.clientName ?: res.client?.fullName ?: state.agentDepositFoundClient?.fullName ?: walletId
+                    val txId = res.deposit?.transactionId ?: res.transactionId ?: (System.currentTimeMillis() % 100000)
+                    val op = com.example.data.model.AgentOperationRecord(
+                        type = "DEPOSIT",
+                        title = "Dépôt Client Espèces",
+                        clientRef = clientName,
+                        amount = res.deposit?.depositedAmount ?: amount,
+                        currency = res.deposit?.currency ?: currency,
+                        commission = res.commission ?: 0.0,
+                        reference = "TX-$txId",
+                        date = "Aujourd'hui, ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}",
+                        status = "Complété"
                     )
+
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositStep = "completed",
+                            agentDepositSuccessDetail = res.deposit,
+                            agentDepositSuccess = res,
+                            agentDepositError = null,
+                            agentOperationsHistory = listOf(op) + it.agentOperationsHistory
+                        )
+                    }
+                    fetchWallet(userId)
+                    loadAgentCommissions()
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositError = res.error ?: "Code PIN incorrect.",
+                            agentDepositStep = "pin"
+                        )
+                    }
                 }
-                fetchWallet(userId)
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
                         isAgentDepositLoading = false,
-                        agentDepositError = err.message ?: "Erreur lors du dépôt client."
+                        agentDepositError = err.message ?: "Code PIN incorrect.",
+                        agentDepositStep = "pin"
                     )
                 }
             }
+        }
+    }
+
+    fun resetAgentDeposit() {
+        _uiState.update {
+            it.copy(
+                agentDepositStep = "identify",
+                agentDepositClientRef = "",
+                agentDepositFoundClient = null,
+                agentDepositAgentBalances = emptyMap(),
+                agentDepositAmount = "",
+                agentDepositPin = "",
+                agentDepositError = null,
+                agentDepositPreview = null,
+                agentDepositDetail = null,
+                agentDepositSuccessDetail = null,
+                agentDepositSuccess = null,
+                agentDepositFinancialDetails = null,
+                isAgentDepositLoading = false
+            )
         }
     }
 

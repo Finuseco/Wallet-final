@@ -62,6 +62,9 @@ interface CashPayDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransactions(transactions: List<TransactionEntity>)
 
+    @Query("DELETE FROM transactions")
+    suspend fun clearTransactions()
+
     // Notifications
     @Query("SELECT * FROM notifications ORDER BY id DESC")
     fun getNotifications(): Flow<List<NotificationEntity>>

@@ -163,6 +163,7 @@ import com.example.ui.viewmodel.DashboardViewModel
 import com.example.util.PdfReceiptGenerator
 import com.example.util.QrCodeGenerator
 import com.example.util.TransactionTypeMapper
+import com.example.ui.components.FloatingCapsuleBottomBar
 import com.example.ui.components.QrScannerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -338,9 +339,13 @@ fun DashboardScreen(
         onSweepPinChange = { dashboardViewModel.setSweepPin(it) },
         onSubmitSweepCommission = { dashboardViewModel.submitSweepCommission(userProfile?.id ?: 1) },
         onDepositClientRefChange = { dashboardViewModel.setAgentDepositClientRef(it) },
+        onSearchDepositClient = { dashboardViewModel.searchAndIdentifyClientForDeposit() },
+        onConfirmDepositClient = { dashboardViewModel.confirmClientForDeposit() },
         onDepositAmountChange = { dashboardViewModel.setAgentDepositAmount(it) },
         onDepositCurrencyChange = { dashboardViewModel.setAgentDepositCurrency(it) },
+        onSubmitDepositAmount = { dashboardViewModel.submitAmountForDeposit() },
         onDepositPinChange = { dashboardViewModel.setAgentDepositPin(it) },
+        onSubmitDepositPin = { dashboardViewModel.submitPinForDeposit(userProfile?.id ?: 1) },
         onSubmitDeposit = { dashboardViewModel.submitAgentDeposit(userProfile?.id ?: 1) },
         onResetDeposit = { dashboardViewModel.resetAgentDeposit() },
         onWithdrawClientRefChange = { dashboardViewModel.setAgentWithdrawClientRef(it) },
@@ -4727,137 +4732,6 @@ private fun RecentCorrespondentItem(
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             lineHeight = 13.sp
-        )
-    }
-}
-
-@Composable
-fun FloatingCapsuleBottomBar(
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit,
-    onCentralActionClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        color = Color.White,
-        shadowElevation = 16.dp,
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-        modifier = modifier
-            .fillMaxWidth()
-            .wrapContentHeight()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                // Tab 0: Portefeuille
-                FloatingNavItem(
-                    label = "Portefeuille",
-                    icon = Icons.Default.AccountBalanceWallet,
-                    isSelected = selectedTab == 0,
-                    onClick = { onTabSelected(0) },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Tab 1: Historique
-                FloatingNavItem(
-                    label = "Historique",
-                    icon = Icons.Default.History,
-                    isSelected = selectedTab == 1,
-                    onClick = { onTabSelected(1) },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Space in center for elevated + button
-                Spacer(modifier = Modifier.weight(1.2f))
-
-                // Tab 2: Cartes
-                FloatingNavItem(
-                    label = "Cartes",
-                    icon = Icons.Default.CreditCard,
-                    isSelected = selectedTab == 2,
-                    onClick = { onTabSelected(2) },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Tab 3: Profil
-                FloatingNavItem(
-                    label = "Profil",
-                    icon = Icons.Default.Person,
-                    isSelected = selectedTab == 3,
-                    onClick = { onTabSelected(3) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Central elevated + button
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(y = (-14).dp)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clickable(onClick = onCentralActionClick),
-                    shape = CircleShape,
-                    color = Color(0xFFFF5B37),
-                    shadowElevation = 8.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Action Rapide",
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FloatingNavItem(
-    label: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isSelected) Color(0xFF00C48C) else Color(0xFF94A3B8),
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = label,
-            fontFamily = MulishFontFamily,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 10.sp,
-            color = if (isSelected) Color(0xFF00C48C) else Color(0xFF94A3B8)
         )
     }
 }

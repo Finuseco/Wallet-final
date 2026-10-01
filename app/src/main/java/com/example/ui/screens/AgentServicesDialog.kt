@@ -33,6 +33,12 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SupportAgent
@@ -100,11 +106,15 @@ fun AgentServicesDialog(
     onSweepIsAllChange: (Boolean) -> Unit,
     onSweepPinChange: (String) -> Unit,
     onSubmitSweepCommission: () -> Unit,
-    // Dépôt Client
+    // Dépôt Client (Multi-step)
     onDepositClientRefChange: (String) -> Unit,
+    onSearchDepositClient: () -> Unit = {},
+    onConfirmDepositClient: () -> Unit = {},
     onDepositAmountChange: (String) -> Unit,
     onDepositCurrencyChange: (String) -> Unit,
+    onSubmitDepositAmount: () -> Unit = {},
     onDepositPinChange: (String) -> Unit,
+    onSubmitDepositPin: () -> Unit = {},
     onSubmitDeposit: () -> Unit,
     onResetDeposit: () -> Unit,
     // Retrait Client (Demande & Confirmation OTP Client)
@@ -308,27 +318,23 @@ fun AgentServicesDialog(
                                 .padding(horizontal = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            AgentCommissionCard(
-                                currency = "USD",
-                                amount = uiState.agentCommissionUsd,
-                                isVisible = isVisible,
-                                color = Color(0xFF0F172A),
-                                onSweep = { onOpenSweepDialog("USD") }
-                            )
-                            AgentCommissionCard(
-                                currency = "CDF",
-                                amount = uiState.agentCommissionCdf,
-                                isVisible = isVisible,
-                                color = Color(0xFF312E81),
-                                onSweep = { onOpenSweepDialog("CDF") }
-                            )
-                            AgentCommissionCard(
-                                currency = "EUR",
-                                amount = uiState.agentCommissionEur,
-                                isVisible = isVisible,
-                                color = Color(0xFF1E3A8A),
-                                onSweep = { onOpenSweepDialog("EUR") }
-                            )
+                            val commMap = if (uiState.agentCommissionsMap.isNotEmpty()) {
+                                uiState.agentCommissionsMap
+                            } else {
+                                mapOf("USD" to uiState.agentCommissionUsd, "CDF" to uiState.agentCommissionCdf)
+                            }
+                            val colors = listOf(Color(0xFF0F172A), Color(0xFF312E81), Color(0xFF1E3A8A), Color(0xFF065F46))
+                            var cIdx = 0
+                            commMap.forEach { (curr, amt) ->
+                                AgentCommissionCard(
+                                    currency = curr,
+                                    amount = amt,
+                                    isVisible = isVisible,
+                                    color = colors[cIdx % colors.size],
+                                    onSweep = { onOpenSweepDialog(curr) }
+                                )
+                                cIdx++
+                            }
                         }
                     }
                 }
@@ -496,9 +502,13 @@ fun AgentServicesDialog(
             uiState = uiState,
             onClose = { activeModal = null },
             onClientRefChange = onDepositClientRefChange,
+            onSearchClient = onSearchDepositClient,
+            onConfirmClient = onConfirmDepositClient,
             onAmountChange = onDepositAmountChange,
             onCurrencyChange = onDepositCurrencyChange,
+            onSubmitAmount = onSubmitDepositAmount,
             onPinChange = onDepositPinChange,
+            onSubmitPin = onSubmitDepositPin,
             onSubmit = onSubmitDeposit,
             onReset = onResetDeposit,
             onOpenQrScanner = onOpenQrScanner
@@ -682,7 +692,7 @@ private fun AgentActionSquare(
 }
 
 // ====================================================
-// --- MODAL: DÉPÔT CLIENT ---
+// --- MODAL: DÉPÔT CLIENT (PARCOURS 5 ÉTAPES CONFORME API) ---
 // ====================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -691,14 +701,19 @@ private fun AgentDepositModal(
     uiState: DashboardUiState,
     onClose: () -> Unit,
     onClientRefChange: (String) -> Unit,
+    onSearchClient: () -> Unit,
+    onConfirmClient: () -> Unit,
     onAmountChange: (String) -> Unit,
     onCurrencyChange: (String) -> Unit,
+    onSubmitAmount: () -> Unit,
     onPinChange: (String) -> Unit,
+    onSubmitPin: () -> Unit,
     onSubmit: () -> Unit,
     onReset: () -> Unit,
     onOpenQrScanner: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val step = uiState.agentDepositStep
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -710,77 +725,247 @@ private fun AgentDepositModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 8.dp)
-                .padding(bottom = 24.dp),
+                .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Header with title and close button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Dépôt d'argent pour un client",
-                    fontFamily = MulishFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Color(0xFF0F172A)
-                )
+                Column {
+                    Text(
+                        text = "Dépôt d'argent — Espace Agent",
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = Color(0xFF0F172A)
+                    )
+                    Text(
+                        text = when (step) {
+                            "identify" -> "Étape 1/4 : Recherche du client"
+                            "confirm_client" -> "Étape 2/4 : Identification du bénéficiaire"
+                            "amount" -> "Étape 3/4 : Choix devise & montant"
+                            "pin" -> "Étape 4/4 : Validation & Code PIN Agent"
+                            "completed" -> "Dépôt validé et complété"
+                            else -> "Service de dépôt d'espèces"
+                        },
+                        fontFamily = MulishFontFamily,
+                        fontSize = 12.sp,
+                        color = Color(0xFF059669),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Fermer")
                 }
             }
 
-            if (uiState.agentDepositSuccess != null) {
+            // Step Progress Bar Indicator (when not completed)
+            if (step != "completed") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val stepIndex = when (step) {
+                        "identify" -> 1
+                        "confirm_client" -> 2
+                        "amount" -> 3
+                        "pin" -> 4
+                        else -> 1
+                    }
+                    for (i in 1..4) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    if (i <= stepIndex) Color(0xFF059669) else Color(0xFFE2E8F0)
+                                )
+                        )
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
+            // ÉTAPE 5 : REÇU OFFICIEL (COMPLETED)
+            // ----------------------------------------------------
+            if (step == "completed" || uiState.agentDepositSuccessDetail != null) {
+                val detail = uiState.agentDepositSuccessDetail ?: uiState.agentDepositDetail
                 val res = uiState.agentDepositSuccess
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0))
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF059669),
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .background(Color(0xFF059669), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+
                         Text(
-                            text = "Dépôt client réussi !",
+                            text = "Dépôt effectué avec succès !",
                             fontFamily = MulishFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp,
                             color = Color(0xFF065F46)
                         )
                         Text(
-                            text = res.message ?: "Le compte client a été crédité.",
+                            text = "Le compte du client a été crédité en direct.",
                             fontFamily = MulishFontFamily,
                             fontSize = 12.sp,
                             color = Color(0xFF047857),
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Réf : ${res.reference ?: "DEP-CONFIRMED"}",
-                            fontFamily = MulishFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = Color(0xFF0F172A)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = onReset,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                            shape = RoundedCornerShape(10.dp)
+
+                        // Reçu détaillé
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                         ) {
-                            Text("Nouveau Dépôt", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("N° Transaction", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                    Text(
+                                        text = "TX-${detail?.transactionId ?: res?.transactionId ?: (System.currentTimeMillis() % 100000)}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Client Bénéficiaire", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                    Text(
+                                        text = detail?.clientName ?: uiState.agentDepositFoundClient?.fullName ?: "Client CashPay",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Montant Déposé", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                    Text(
+                                        text = "${detail?.depositedAmount ?: detail?.depositAmount ?: uiState.agentDepositAmount} ${detail?.currency ?: uiState.agentDepositCurrency}",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF059669),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Frais d'opération", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                    Text(
+                                        text = "0.00 ${detail?.currency ?: uiState.agentDepositCurrency} (Gratuit)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF059669),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Total Débité Agent", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                    Text(
+                                        text = "${detail?.totalDebited ?: detail?.totalDebitAgent ?: uiState.agentDepositAmount} ${detail?.currency ?: uiState.agentDepositCurrency}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                if (detail?.agentRemainingBalance != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Nouveau solde agent", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                        Text(
+                                            text = "${String.format(java.util.Locale.US, "%,.2f", detail.agentRemainingBalance)} ${detail.currency}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0F172A),
+                                            fontFamily = MulishFontFamily
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = onReset,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f).height(46.dp)
+                            ) {
+                                Text("Nouveau Dépôt", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = onClose,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f).height(46.dp)
+                            ) {
+                                Text("Fermer", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                            }
                         }
                     }
                 }
-            } else {
+            }
+
+            // ----------------------------------------------------
+            // ÉTAPE 1 : IDENTIFY (RECHERCHE CLIENT / SCANNER)
+            // ----------------------------------------------------
+            else if (step == "identify") {
+                Text(
+                    text = "Veuillez identifier le compte du client souhaitant déposer des espèces.",
+                    fontFamily = MulishFontFamily,
+                    fontSize = 13.sp,
+                    color = Color(0xFF475569)
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -788,9 +973,21 @@ private fun AgentDepositModal(
                     OutlinedTextField(
                         value = uiState.agentDepositClientRef,
                         onValueChange = onClientRefChange,
-                        label = { Text("Numéro ou Wallet ID client") },
+                        label = { Text("Numéro de téléphone ou Wallet ID") },
+                        placeholder = { Text("Ex: 0820000000 ou WALLET-XXXX") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B))
+                        },
+                        trailingIcon = {
+                            if (uiState.agentDepositClientRef.isNotBlank()) {
+                                IconButton(onClick = { onClientRefChange("") }) {
+                                    Icon(imageVector = Icons.Default.Close, contentDescription = "Effacer", tint = Color(0xFF94A3B8))
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
@@ -801,28 +998,262 @@ private fun AgentDepositModal(
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scanner",
+                            contentDescription = "Scanner QR Client",
                             tint = Color(0xFF00C48C)
                         )
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("USD", "CDF", "EUR").forEach { curr ->
-                        val selected = uiState.agentDepositCurrency == curr
+                if (uiState.agentDepositError != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFEF2F2),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(imageVector = Icons.Default.ErrorOutline, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = uiState.agentDepositError,
+                                fontFamily = MulishFontFamily,
+                                color = Color(0xFFDC2626),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onSearchClient,
+                    enabled = !uiState.isAgentDepositLoading && uiState.agentDepositClientRef.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                ) {
+                    if (uiState.isAgentDepositLoading) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Rechercher le client", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
+            // ÉTAPE 2 : CONFIRM_CLIENT (CONFIRMATION DU CLIENT TROUVÉ)
+            // ----------------------------------------------------
+            else if (step == "confirm_client") {
+                val client = uiState.agentDepositFoundClient
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .background(Color(0xFF0F172A), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val initials = (client?.fullName ?: client?.firstName ?: "C")
+                                    .split(" ")
+                                    .take(2)
+                                    .mapNotNull { it.firstOrNull()?.toString() }
+                                    .joinToString("")
+                                Text(
+                                    text = initials.ifBlank { "CP" },
+                                    color = Color(0xFF00C48C),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    fontFamily = MulishFontFamily
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = client?.fullName ?: client?.firstName ?: "Client CashPay",
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF0F172A)
+                                )
+                                Text(
+                                    text = client?.phone ?: "-",
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFECFDF5),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "ID: ${client?.walletId ?: uiState.agentDepositClientRef}",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF059669),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (selected) Color(0xFF059669) else Color(0xFFE2E8F0),
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFF1F5F9),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(imageVector = Icons.Default.Verified, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Compte client vérifié et actif pour dépôt d'espèces.",
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF334155)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (uiState.agentDepositError != null) {
+                    Text(
+                        text = uiState.agentDepositError,
+                        fontFamily = MulishFontFamily,
+                        color = Color(0xFFDC2626),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = onReset,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text("Modifier", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                    }
+
+                    Button(
+                        onClick = onConfirmClient,
+                        enabled = !uiState.isAgentDepositLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        if (uiState.isAgentDepositLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Confirmer", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
+            // ÉTAPE 3 : AMOUNT (CHOIX DEVISE & MONTANT)
+            // ----------------------------------------------------
+            else if (step == "amount") {
+                val client = uiState.agentDepositFoundClient
+                val returnedBalances = if (uiState.agentDepositAgentBalances.isNotEmpty()) {
+                    uiState.agentDepositAgentBalances
+                } else if (uiState.agentBalancesMap.isNotEmpty()) {
+                    uiState.agentBalancesMap
+                } else {
+                    mapOf("CDF" to 250000.0, "USD" to 150.0)
+                }
+
+                // Mini client banner
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF1F5F9),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Bénéficiaire : ${client?.fullName ?: client?.firstName ?: uiState.agentDepositClientRef}",
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Choisissez la devise selon les disponibilités de votre portefeuille :",
+                    fontFamily = MulishFontFamily,
+                    fontSize = 12.sp,
+                    color = Color(0xFF475569)
+                )
+
+                // Currency selector showing agent's actual balance in each currency
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    returnedBalances.forEach { (curr, bal) ->
+                        val isSelected = uiState.agentDepositCurrency == curr
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Color(0xFF059669) else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.5.dp,
+                                if (isSelected) Color(0xFF059669) else Color(0xFFCBD5E1)
+                            ),
                             modifier = Modifier.clickable { onCurrencyChange(curr) }
                         ) {
-                            Text(
-                                text = curr,
-                                fontFamily = MulishFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = if (selected) Color.White else Color(0xFF334155),
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = curr,
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp,
+                                    color = if (isSelected) Color.White else Color(0xFF0F172A)
+                                )
+                                Text(
+                                    text = "Solde: ${String.format(java.util.Locale.US, "%,.0f", bal)}",
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 10.sp,
+                                    color = if (isSelected) Color.White.copy(alpha = 0.85f) else Color(0xFF64748B)
+                                )
+                            }
                         }
                     }
                 }
@@ -830,18 +1261,191 @@ private fun AgentDepositModal(
                 OutlinedTextField(
                     value = uiState.agentDepositAmount,
                     onValueChange = onAmountChange,
-                    label = { Text("Montant reçu en espèces") },
+                    label = { Text("Montant reçu en espèces (${uiState.agentDepositCurrency})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    trailingIcon = {
+                        Text(
+                            text = uiState.agentDepositCurrency,
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF059669),
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                    }
                 )
+
+                // Quick amount chips
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val presets = if (uiState.agentDepositCurrency == "USD" || uiState.agentDepositCurrency == "EUR") {
+                        listOf("10", "20", "50", "100", "200")
+                    } else {
+                        listOf("5000", "10000", "25000", "50000", "100000")
+                    }
+                    presets.forEach { amt ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFF1F5F9),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.clickable { onAmountChange(amt) }
+                        ) {
+                            Text(
+                                text = "+$amt ${uiState.agentDepositCurrency}",
+                                fontFamily = MulishFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF334155),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFECFDF5),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Frais d'opération : 0.00 ${uiState.agentDepositCurrency}. Le montant débité de votre compte est égal au montant déposé.",
+                        fontFamily = MulishFontFamily,
+                        fontSize = 11.sp,
+                        color = Color(0xFF047857),
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+
+                if (uiState.agentDepositError != null) {
+                    Text(
+                        text = uiState.agentDepositError,
+                        fontFamily = MulishFontFamily,
+                        color = Color(0xFFDC2626),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = onReset,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text("Retour", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                    }
+
+                    Button(
+                        onClick = onSubmitAmount,
+                        enabled = !uiState.isAgentDepositLoading && (uiState.agentDepositAmount.toDoubleOrNull() ?: 0.0) > 0.0,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1.5f).height(48.dp)
+                    ) {
+                        if (uiState.isAgentDepositLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Continuer", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
+            // ÉTAPE 4 : PIN (RÉCAPITULATIF & CODE PIN AGENT)
+            // ----------------------------------------------------
+            else if (step == "pin") {
+                val detail = uiState.agentDepositDetail
+
+                // Financial recap card strictly populated from server response
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Récapitulatif Financier Fourni par le Serveur",
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Bénéficiaire", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                            Text(
+                                text = detail?.clientName ?: uiState.agentDepositFoundClient?.fullName ?: "Client",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A),
+                                fontFamily = MulishFontFamily
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Montant du dépôt", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                            Text(
+                                text = "${detail?.depositAmount ?: uiState.agentDepositAmount} ${detail?.currency ?: uiState.agentDepositCurrency}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF059669),
+                                fontFamily = MulishFontFamily
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Frais agent", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                            Text(
+                                text = "0.00 ${detail?.currency ?: uiState.agentDepositCurrency}",
+                                fontSize = 12.sp,
+                                color = Color(0xFF059669),
+                                fontFamily = MulishFontFamily
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Total débité agent", fontSize = 12.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                            Text(
+                                text = "${detail?.totalDebitAgent ?: uiState.agentDepositAmount} ${detail?.currency ?: uiState.agentDepositCurrency}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F172A),
+                                fontFamily = MulishFontFamily
+                            )
+                        }
+                        if (detail?.agentBalanceBefore != null && detail.agentBalanceAfter != null) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Votre solde (Avant → Après)", fontSize = 11.sp, color = Color(0xFF64748B), fontFamily = MulishFontFamily)
+                                Text(
+                                    text = "${String.format(java.util.Locale.US, "%,.2f", detail.agentBalanceBefore)} → ${String.format(java.util.Locale.US, "%,.2f", detail.agentBalanceAfter)} ${detail.currency}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF334155),
+                                    fontFamily = MulishFontFamily
+                                )
+                            }
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = uiState.agentDepositPin,
-                    onValueChange = { if (it.length <= 4) onPinChange(it) },
+                    onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) onPinChange(it) },
                     label = { Text("Code PIN Agent (4 chiffres)") },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color(0xFF64748B))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -855,19 +1459,33 @@ private fun AgentDepositModal(
                     )
                 }
 
-                Button(
-                    onClick = onSubmit,
-                    enabled = !uiState.isAgentDepositLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (uiState.isAgentDepositLoading) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                    } else {
-                        Text("Confirmer le Dépôt", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = onReset,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) {
+                        Text("Annuler", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                    }
+
+                    Button(
+                        onClick = onSubmitPin,
+                        enabled = !uiState.isAgentDepositLoading && uiState.agentDepositPin.length == 4,
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                    ) {
+                        if (uiState.isAgentDepositLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Valider le Dépôt", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

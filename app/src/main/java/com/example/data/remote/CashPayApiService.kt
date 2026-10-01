@@ -221,8 +221,11 @@ interface CashPayApiService {
         @Body request: com.example.data.model.AgentLoanRepaymentRequest
     ): Response<com.example.data.model.AgentLoanRepaymentResponse>
 
-    @POST("api/v1/agent/transfer-commission")
-    suspend fun transferCommission(
+    @GET("api/v1/agent/commissions")
+    suspend fun getAgentCommissions(): Response<com.example.data.model.AgentCommissionsResponse>
+
+    @POST("api/v1/agent/commissions/transfer")
+    suspend fun transferAgentCommission(
         @Body request: com.example.data.model.AgentCommissionTransferRequest
     ): Response<com.example.data.model.AgentCommissionTransferResponse>
 }
