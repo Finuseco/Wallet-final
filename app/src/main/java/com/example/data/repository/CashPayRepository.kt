@@ -825,7 +825,7 @@ class CashPayRepository(
                         !photo.isNullOrBlank() && (photo.startsWith("http://") || photo.startsWith("https://")) -> photo
                         !photo.isNullOrBlank() && photo.startsWith("/") -> "https://app.cashpay-all.com$photo"
                         !photo.isNullOrBlank() -> "https://app.cashpay-all.com/$photo"
-                        else -> "https://api.dicebear.com/7.x/avataaars/svg?seed=$queryPhone"
+                        else -> null
                     }
                     profile.copy(profilePhotoUrl = fullPhotoUrl, profilePhoto = fullPhotoUrl)
                 } else null
@@ -833,6 +833,49 @@ class CashPayRepository(
             } else {
                 val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de rechercher le profil public")
                 Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun searchProfileByWallet(walletId: String): Result<com.example.data.model.PublicProfileResponse> {
+        return try {
+            val trimmed = walletId.trim()
+            val identifyReq = com.example.data.model.AgentDepositRequest(
+                step = "identify",
+                clientWalletId = trimmed,
+                clientRef = trimmed
+            )
+            val identifyRes = executeAgentDeposit(identifyReq)
+            if (identifyRes.isSuccess && identifyRes.getOrNull()?.client != null) {
+                val client = identifyRes.getOrNull()!!.client!!
+                val photo = client.profilePhotoUrl
+                val fullPhotoUrl = when {
+                    !photo.isNullOrBlank() && (photo.startsWith("http://") || photo.startsWith("https://")) -> photo
+                    !photo.isNullOrBlank() && photo.startsWith("/") -> "https://app.cashpay-all.com$photo"
+                    !photo.isNullOrBlank() -> "https://app.cashpay-all.com/$photo"
+                    else -> null
+                }
+                val profileDto = com.example.data.model.PublicProfileDto(
+                    walletId = client.walletId ?: trimmed,
+                    fullName = client.fullName ?: client.firstName ?: trimmed,
+                    role = client.role,
+                    profilePhotoUrl = fullPhotoUrl,
+                    profilePhoto = fullPhotoUrl
+                )
+                Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = profileDto
+                ))
+            } else {
+                // If it contains digits, fallback to searchProfileByPhone
+                if (trimmed.any { it.isDigit() }) {
+                    searchProfileByPhone(trimmed)
+                } else {
+                    Result.failure(Exception("Portefeuille introuvable."))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)

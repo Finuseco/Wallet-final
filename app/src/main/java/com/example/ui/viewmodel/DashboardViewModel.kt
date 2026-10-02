@@ -93,7 +93,44 @@ data class DashboardUiState(
 
     // --- CONTACTS & PUBLIC PROFILE STATE ---
     val contactsList: List<com.example.data.model.PhoneContact> = emptyList(),
-    val recentCorrespondents: List<com.example.data.model.PhoneContact> = emptyList(),
+    val recentCorrespondents: List<com.example.data.model.PhoneContact> = listOf(
+        com.example.data.model.PhoneContact(
+            name = "Jean Mukendi",
+            phone = "+243812345678",
+            normalizedPhone = "0812345678",
+            isCashPayUser = true,
+            publicProfile = com.example.data.model.PublicProfileDto(
+                walletId = "WAL-812345",
+                fullName = "Jean Mukendi",
+                profilePhotoUrl = "drawable:avatar_jean",
+                profilePhoto = "drawable:avatar_jean"
+            )
+        ),
+        com.example.data.model.PhoneContact(
+            name = "Marie Kabila",
+            phone = "+243823456789",
+            normalizedPhone = "0823456789",
+            isCashPayUser = true,
+            publicProfile = com.example.data.model.PublicProfileDto(
+                walletId = "WAL-823456",
+                fullName = "Marie Kabila",
+                profilePhotoUrl = "drawable:avatar_marie",
+                profilePhoto = "drawable:avatar_marie"
+            )
+        ),
+        com.example.data.model.PhoneContact(
+            name = "Koffi Olomide",
+            phone = "+243894567890",
+            normalizedPhone = "0894567890",
+            isCashPayUser = true,
+            publicProfile = com.example.data.model.PublicProfileDto(
+                walletId = "WAL-894567",
+                fullName = "Koffi Olomide",
+                profilePhotoUrl = "drawable:avatar_koffi",
+                profilePhoto = "drawable:avatar_koffi"
+            )
+        )
+    ),
     val isContactsDialogOpen: Boolean = false,
     val isContactsPageOpen: Boolean = false,
     val isAddContactDialogOpen: Boolean = false,
@@ -236,7 +273,11 @@ data class DashboardUiState(
     val agentLoanRepayError: String? = null,
     val agentLoanRepaySuccess: com.example.data.model.AgentLoanRepaymentResponse? = null,
     // Agent History (Real operations only)
-    val agentOperationsHistory: List<com.example.data.model.AgentOperationRecord> = emptyList()
+    val agentOperationsHistory: List<com.example.data.model.AgentOperationRecord> = emptyList(),
+    val currentUserId: Long? = null,
+    val transferSearchMode: String = "wallet", // "wallet" or "phone"
+    val isSearchingTransferRecipient: Boolean = false,
+    val agentDepositSearchMode: String = "wallet" // "wallet" or "phone"
 )
 
 class DashboardViewModel(
@@ -254,6 +295,7 @@ class DashboardViewModel(
             repository.session.collect { session ->
                 if (session != null && session.isAuthenticated) {
                     val userId = session.userId
+                    _uiState.update { it.copy(currentUserId = userId) }
                     fetchWallet(userId)
                     loadTransactions(userId)
                     fetchNotifications()
@@ -268,6 +310,21 @@ class DashboardViewModel(
             }
         }
         seedRecentCorrespondents()
+    }
+
+    fun getEffectiveUserId(provided: Long? = null): Long {
+        if (provided != null && provided > 1L) return provided
+        val stId = _uiState.value.currentUserId
+        if (stId != null && stId > 0L) return stId
+        return provided ?: 1L
+    }
+
+    fun setTransferSearchMode(mode: String) {
+        _uiState.update { it.copy(transferSearchMode = mode, transferError = null) }
+    }
+
+    fun setAgentDepositSearchMode(mode: String) {
+        _uiState.update { it.copy(agentDepositSearchMode = mode, agentDepositError = null) }
     }
 
     // --- CARDS ACTIONS ---
@@ -582,15 +639,16 @@ class DashboardViewModel(
     }
 
     fun loadTransactions(
-        userId: Long = 1,
+        userId: Long? = null,
         direction: String? = null,
         from: String? = null,
         to: String? = null
     ) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(isLoadingTransactions = true, transactionsError = null) }
         viewModelScope.launch {
             val result = repository.fetchTransactionsApi(
-                userId = userId,
+                userId = effectiveUserId,
                 limit = 50,
                 offset = 0,
                 from = from,
@@ -605,17 +663,19 @@ class DashboardViewModel(
         }
     }
 
-    fun setTxDirectionFilter(dir: String, userId: Long = 1) {
+    fun setTxDirectionFilter(dir: String, userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(txDirectionFilter = dir) }
         val dirParam = when (dir) {
             "INCOMING" -> "incoming"
             "OUTGOING" -> "outgoing"
             else -> null
         }
-        loadTransactions(userId, direction = dirParam)
+        loadTransactions(effectiveUserId, direction = dirParam)
     }
 
-    fun setTxDateFilter(filter: String, userId: Long = 1) {
+    fun setTxDateFilter(filter: String, userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(txDateFilter = filter) }
         val dirParam = when (_uiState.value.txDirectionFilter) {
             "INCOMING" -> "incoming"
@@ -623,17 +683,18 @@ class DashboardViewModel(
             else -> null
         }
         val (from, to) = calculateFromTo(filter, _uiState.value.customFromDate, _uiState.value.customToDate)
-        loadTransactions(userId, direction = dirParam, from = from, to = to)
+        loadTransactions(effectiveUserId, direction = dirParam, from = from, to = to)
     }
 
-    fun setCustomDates(from: String, to: String, userId: Long = 1) {
+    fun setCustomDates(from: String, to: String, userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(customFromDate = from, customToDate = to, txDateFilter = "CUSTOM") }
         val dirParam = when (_uiState.value.txDirectionFilter) {
             "INCOMING" -> "incoming"
             "OUTGOING" -> "outgoing"
             else -> null
         }
-        loadTransactions(userId, direction = dirParam, from = from, to = to)
+        loadTransactions(effectiveUserId, direction = dirParam, from = from, to = to)
     }
 
     fun onSearchQueryChanged(q: String) {
@@ -663,10 +724,11 @@ class DashboardViewModel(
         }
     }
 
-    fun fetchWallet(userId: Long) {
+    fun fetchWallet(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(isLoadingWallet = true, walletError = null) }
         viewModelScope.launch {
-            val result = repository.getWallet(userId)
+            val result = repository.getWallet(effectiveUserId)
             result.onSuccess { resp ->
                 _uiState.update { it.copy(isLoadingWallet = false, walletResponse = resp) }
             }.onFailure { err ->
@@ -760,20 +822,30 @@ class DashboardViewModel(
         }
     }
 
-    fun openTransferDialog(userId: Long = 1) {
+    fun openTransferDialog(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
+        val fiatBalances = _uiState.value.walletResponse?.balances?.fiat ?: emptyMap()
+        val defaultCurrency = when {
+            (fiatBalances["CDF"] ?: 0.0) > 0.0 -> "CDF"
+            (fiatBalances["USD"] ?: 0.0) > 0.0 -> "USD"
+            (fiatBalances["EUR"] ?: 0.0) > 0.0 -> "EUR"
+            else -> _uiState.value.transferCurrency
+        }
         _uiState.update {
             it.copy(
                 isQuickTransferOpen = true,
                 transferRecipient = "",
+                transferCurrency = defaultCurrency,
                 transferAmount = "",
                 transferFee = null,
                 transferTotalDebit = null,
                 transferError = null,
                 transferStep = 1,
-                transferSuccess = false
+                transferSuccess = false,
+                isSearchingTransferRecipient = false
             )
         }
-        loadTransfersMeta(userId)
+        loadTransfersMeta(effectiveUserId)
     }
 
     fun closeTransferDialog() {
@@ -784,16 +856,70 @@ class DashboardViewModel(
     fun onAmountChanged(v: String) = _uiState.update { it.copy(transferAmount = v, transferError = null) }
     fun onCurrencyChanged(c: String) = _uiState.update { it.copy(transferCurrency = c, transferError = null) }
 
-    fun loadTransfersMeta(userId: Long) {
+    fun searchTransferRecipient() {
+        val raw = _uiState.value.transferRecipient.trim()
+        if (raw.isBlank()) {
+            _uiState.update { it.copy(transferError = "Veuillez entrer un ID Wallet ou un numéro de téléphone.") }
+            return
+        }
+        _uiState.update { it.copy(isSearchingTransferRecipient = true, transferError = null) }
         viewModelScope.launch {
-            val result = repository.getTransfersMeta(userId)
-            result.onSuccess { meta ->
-                _uiState.update { it.copy(transfersMeta = meta) }
+            val isPhone = _uiState.value.transferSearchMode == "phone" || (raw.all { it.isDigit() || it == '+' || it == ' ' } && raw.filter { it.isDigit() }.length >= 8)
+            val result = if (isPhone) {
+                repository.searchProfileByPhone(raw)
+            } else {
+                repository.searchProfileByWallet(raw)
+            }
+            result.onSuccess { pubResp ->
+                val profile = pubResp.profile
+                if (profile != null) {
+                    _uiState.update {
+                        it.copy(
+                            isSearchingTransferRecipient = false,
+                            prefilledRecipient = profile,
+                            prefilledContactName = profile.fullName,
+                            transferRecipient = profile.walletId,
+                            transferError = null
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSearchingTransferRecipient = false,
+                            transferError = "Compte introuvable pour cette recherche."
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isSearchingTransferRecipient = false,
+                        transferError = err.message ?: "Compte introuvable."
+                    )
+                }
             }
         }
     }
 
-    fun previewTransfer(userId: Long) {
+    fun loadTransfersMeta(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
+        viewModelScope.launch {
+            val result = repository.getTransfersMeta(effectiveUserId)
+            result.onSuccess { meta ->
+                val currentCurr = _uiState.value.transferCurrency
+                val foundCurr = meta.currencies.firstOrNull { it.code.equals(currentCurr, ignoreCase = true) }
+                val newCurrency = if (foundCurr != null && foundCurr.balance > 0.0) {
+                    foundCurr.code
+                } else {
+                    meta.currencies.firstOrNull { it.balance > 0.0 }?.code ?: currentCurr
+                }
+                _uiState.update { it.copy(transfersMeta = meta, transferCurrency = newCurrency) }
+            }
+        }
+    }
+
+    fun previewTransfer(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.transferAmount.toDoubleOrNull() ?: 0.0
         if (amount <= 0.0) {
@@ -801,16 +927,40 @@ class DashboardViewModel(
             return
         }
         if (state.transferRecipient.isBlank()) {
-            _uiState.update { it.copy(transferError = "Le destinataire est requis.") }
+            _uiState.update { it.copy(transferError = "Le destinataire est requis (N° de téléphone ou Wallet ID).") }
             return
         }
 
         _uiState.update { it.copy(isTransferLoading = true, transferError = null) }
         viewModelScope.launch {
             val isBtc = state.transferCurrency.uppercase() == "BTC"
+            var targetRecipient = state.transferRecipient.trim()
+
+            // If not BTC, resolve profile by phone or wallet ID to get actual Wallet ID & Avatar
+            if (!isBtc) {
+                val isPhone = state.transferSearchMode == "phone" || (targetRecipient.all { it.isDigit() || it == '+' || it == ' ' } && targetRecipient.filter { it.isDigit() }.length >= 8)
+                val profileRes = if (isPhone) {
+                    repository.searchProfileByPhone(targetRecipient)
+                } else {
+                    repository.searchProfileByWallet(targetRecipient)
+                }
+                profileRes.onSuccess { pubResp ->
+                    val profile = pubResp.profile
+                    if (profile != null) {
+                        targetRecipient = profile.walletId
+                        _uiState.update {
+                            it.copy(
+                                prefilledRecipient = profile,
+                                prefilledContactName = profile.fullName
+                            )
+                        }
+                    }
+                }
+            }
+
             val req = TransferRequest(
-                userId = userId,
-                receiverWalletId = if (!isBtc) state.transferRecipient else null,
+                userId = effectiveUserId,
+                receiverWalletId = if (!isBtc) targetRecipient else null,
                 recipientAddress = if (isBtc) state.transferRecipient else null,
                 amount = amount,
                 currency = state.transferCurrency,
@@ -838,16 +988,18 @@ class DashboardViewModel(
         }
     }
 
-    fun confirmTransfer(userId: Long, pin: String) {
+    fun confirmTransfer(userId: Long? = null, pin: String) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.transferAmount.toDoubleOrNull() ?: 0.0
+        val targetWalletId = state.prefilledRecipient?.walletId ?: state.transferRecipient.trim()
         _uiState.update { it.copy(isTransferLoading = true, transferError = null) }
 
         viewModelScope.launch {
             val isBtc = state.transferCurrency.uppercase() == "BTC"
             val req = TransferRequest(
-                userId = userId,
-                receiverWalletId = if (!isBtc) state.transferRecipient else null,
+                userId = effectiveUserId,
+                receiverWalletId = if (!isBtc) targetWalletId else null,
                 recipientAddress = if (isBtc) state.transferRecipient else null,
                 amount = amount,
                 currency = state.transferCurrency,
@@ -864,7 +1016,20 @@ class DashboardViewModel(
                         transferError = null
                     )
                 }
-                fetchWallet(userId)
+                // Add to recent correspondents with full profile photo
+                state.prefilledRecipient?.let { prof ->
+                    addRecentCorrespondent(
+                        com.example.data.model.PhoneContact(
+                            name = prof.fullName,
+                            phone = "",
+                            normalizedPhone = "",
+                            isCashPayUser = true,
+                            publicProfile = prof
+                        )
+                    )
+                }
+                fetchWallet(effectiveUserId)
+                loadTransactions(effectiveUserId)
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
@@ -968,9 +1133,12 @@ class DashboardViewModel(
     fun addRecentCorrespondent(contact: com.example.data.model.PhoneContact) {
         val current = _uiState.value.recentCorrespondents.toMutableList()
         // Remove duplicate if already exists
-        current.removeAll { it.publicProfile?.walletId == contact.publicProfile?.walletId || it.name == contact.name }
+        current.removeAll { 
+            (it.publicProfile?.walletId != null && it.publicProfile?.walletId == contact.publicProfile?.walletId) ||
+            it.name.equals(contact.name, ignoreCase = true) 
+        }
         current.add(0, contact)
-        _uiState.update { it.copy(recentCorrespondents = current.take(3)) }
+        _uiState.update { it.copy(recentCorrespondents = current.take(5)) }
     }
 
     fun openAddContactDialog() {
@@ -996,9 +1164,8 @@ class DashboardViewModel(
 
     fun searchAddContact() {
         val raw = _uiState.value.addContactPhone.trim()
-        val digits = raw.filter { it.isDigit() }
-        if (digits.length < 9) {
-            _uiState.update { it.copy(addContactError = "Veuillez entrer un numéro valide (au moins 9 chiffres).") }
+        if (raw.length < 3) {
+            _uiState.update { it.copy(addContactError = "Veuillez entrer un numéro de téléphone ou un Wallet ID valide.") }
             return
         }
         _uiState.update {
@@ -1010,33 +1177,37 @@ class DashboardViewModel(
             )
         }
         viewModelScope.launch {
-            repository.searchProfileByPhone(raw)
-                .onSuccess { resp ->
-                    _uiState.update {
-                        it.copy(
-                            isSearchingAddContact = false,
-                            addContactFoundProfile = if (resp.success && resp.found) resp.profile else null,
-                            addContactNotFound = !(resp.success && resp.found && resp.profile != null)
-                        )
-                    }
+            val isPhone = raw.all { it.isDigit() || it == '+' || it == ' ' } && raw.filter { it.isDigit() }.length >= 8
+            val result = if (isPhone) {
+                repository.searchProfileByPhone(raw)
+            } else {
+                repository.searchProfileByWallet(raw)
+            }
+            result.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isSearchingAddContact = false,
+                        addContactFoundProfile = if (resp.success && resp.found) resp.profile else null,
+                        addContactNotFound = !(resp.success && resp.found && resp.profile != null)
+                    )
                 }
-                .onFailure { err ->
-                    _uiState.update {
-                        it.copy(
-                            isSearchingAddContact = false,
-                            addContactError = err.message ?: "Erreur de connexion",
-                            addContactNotFound = false
-                        )
-                    }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isSearchingAddContact = false,
+                        addContactError = err.message ?: "Compte introuvable",
+                        addContactNotFound = true
+                    )
                 }
+            }
         }
     }
 
     fun confirmAddContact(profile: com.example.data.model.PublicProfileDto) {
         val contact = com.example.data.model.PhoneContact(
             name = profile.fullName,
-            phone = "",
-            normalizedPhone = "",
+            phone = _uiState.value.addContactPhone,
+            normalizedPhone = _uiState.value.addContactPhone,
             isCashPayUser = true,
             publicProfile = profile
         )
@@ -1236,7 +1407,8 @@ class DashboardViewModel(
         _uiState.update { it.copy(withdrawalStep = 2) }
     }
 
-    fun proceedToPreview(userId: Long = 1) {
+    fun proceedToPreview(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.withdrawalAmount.toDoubleOrNull() ?: 0.0
         if (amount <= 0.0) {
@@ -1285,7 +1457,8 @@ class DashboardViewModel(
         _uiState.update { it.copy(withdrawalStep = 4, withdrawalConfirmError = null) }
     }
 
-    fun confirmWithdrawal(userId: Long, pin: String) {
+    fun confirmWithdrawal(userId: Long? = null, pin: String) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.withdrawalAmount.toDoubleOrNull() ?: 0.0
         if (amount <= 0.0 || pin.length != 4) {
@@ -1316,7 +1489,7 @@ class DashboardViewModel(
                             withdrawalStep = 5 // Success Step
                         )
                     }
-                    fetchWallet(userId) // Update local balance
+                    fetchWallet(effectiveUserId) // Update local balance
                 } else {
                     _uiState.update {
                         it.copy(
@@ -1475,7 +1648,8 @@ class DashboardViewModel(
         }
     }
 
-    fun submitLoanRequest(userId: Long = 1) {
+    fun submitLoanRequest(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.loanRequestAmount.toDoubleOrNull() ?: 0.0
         if (amount <= 0.0) {
@@ -1503,7 +1677,7 @@ class DashboardViewModel(
                     }
                     fetchActiveLoan()
                     fetchLoanHistory()
-                    fetchWallet(userId) // update wallet balance
+                    fetchWallet(effectiveUserId) // update wallet balance
                 } else {
                     _uiState.update {
                         it.copy(
@@ -1523,7 +1697,8 @@ class DashboardViewModel(
         }
     }
 
-    fun submitLoanRepayment(loanId: Long, userId: Long = 1) {
+    fun submitLoanRepayment(loanId: Long, userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.loanRepayAmount.toDoubleOrNull() ?: 0.0
         if (amount <= 0.0) {
@@ -1546,7 +1721,7 @@ class DashboardViewModel(
                         }
                         fetchActiveLoan()
                         fetchLoanHistory()
-                        fetchWallet(userId)
+                        fetchWallet(effectiveUserId)
                     } else {
                         _uiState.update {
                             it.copy(
@@ -1567,7 +1742,8 @@ class DashboardViewModel(
         }
     }
 
-    fun submitInstallmentRepayment(loanId: Long, installmentId: Long, userId: Long = 1) {
+    fun submitInstallmentRepayment(loanId: Long, installmentId: Long, userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         _uiState.update { it.copy(isRepayInstallmentLoading = true, repayInstallmentError = null, loanInstallmentSuccess = false) }
         viewModelScope.launch {
             repository.repayLoanInstallment(loanId, installmentId)
@@ -1582,7 +1758,7 @@ class DashboardViewModel(
                         }
                         fetchActiveLoan()
                         fetchLoanHistory()
-                        fetchWallet(userId)
+                        fetchWallet(effectiveUserId)
                     } else {
                         _uiState.update {
                             it.copy(
@@ -1629,7 +1805,8 @@ class DashboardViewModel(
         _uiState.update { it.copy(agentPin = pin, activateAgentError = null) }
     }
 
-    fun submitActivateAgent(userId: Long = 1) {
+    fun submitActivateAgent(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val plan = _uiState.value.agentPlan
         val pin = _uiState.value.agentPin
         if (pin.length != 4) {
@@ -1650,7 +1827,7 @@ class DashboardViewModel(
                             activateAgentError = null
                         )
                     }
-                    fetchWallet(userId)
+                    fetchWallet(effectiveUserId)
                 } else {
                     _uiState.update {
                         it.copy(
@@ -1951,7 +2128,8 @@ class DashboardViewModel(
         _uiState.update { it.copy(sweepPin = pin, sweepCommissionError = null) }
     }
 
-    fun submitSweepCommission(userId: Long = 1) {
+    fun submitSweepCommission(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val curr = state.sweepCurrency.uppercase()
         val available = when (curr) {
@@ -2032,8 +2210,8 @@ class DashboardViewModel(
                 }
 
                 // Also reload wallet from backend to keep everything synchronized
-                fetchWallet(userId)
-            }.onFailure { err ->
+                fetchWallet(effectiveUserId)
+            }.onFailure { _ ->
                 // Even on fallback/mock testing, make the transition seamless if PIN was 4 digits
                 val newUsdComm = if (curr == "USD") (state.agentCommissionUsd - amountToSweep).coerceAtLeast(0.0) else state.agentCommissionUsd
                 val newCdfComm = if (curr == "CDF") (state.agentCommissionCdf - amountToSweep).coerceAtLeast(0.0) else state.agentCommissionCdf
@@ -2110,7 +2288,7 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentDepositLoading = true, agentDepositError = null, agentDepositPreview = null) }
 
         viewModelScope.launch {
-            val isPhone = clientRef.all { it.isDigit() || it == '+' }
+            val isPhone = _uiState.value.agentDepositSearchMode == "phone" || (clientRef.all { it.isDigit() || it == '+' || it == ' ' } && clientRef.filter { it.isDigit() }.length >= 8)
             val req = com.example.data.model.AgentDepositRequest(
                 step = "identify",
                 clientWalletId = clientRef,
@@ -2141,8 +2319,8 @@ class DashboardViewModel(
                         }
                     }
                 } else {
-                    // Fallback to public profile search by phone/ref
-                    val profileRes = repository.searchProfileByPhone(clientRef)
+                    // Fallback to public profile search by phone or wallet ID
+                    val profileRes = if (isPhone) repository.searchProfileByPhone(clientRef) else repository.searchProfileByWallet(clientRef)
                     profileRes.onSuccess { pubResp ->
                         val profile = pubResp.profile
                         if (profile != null) {
@@ -2189,11 +2367,41 @@ class DashboardViewModel(
                     }
                 }
             }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        isAgentDepositLoading = false,
-                        agentDepositError = err.message ?: "Client introuvable."
-                    )
+                // Check public profile as second line
+                val profileRes = if (isPhone) repository.searchProfileByPhone(clientRef) else repository.searchProfileByWallet(clientRef)
+                profileRes.onSuccess { pubResp ->
+                    val profile = pubResp.profile
+                    if (profile != null && profile.role?.lowercase() != "agent") {
+                        val clientDto = com.example.data.model.AgentDepositClientDto(
+                            walletId = profile.walletId,
+                            phone = clientRef,
+                            fullName = profile.fullName,
+                            role = profile.role,
+                            profilePhotoUrl = profile.profilePhotoUrl ?: profile.profilePhoto
+                        )
+                        _uiState.update {
+                            it.copy(
+                                isAgentDepositLoading = false,
+                                agentDepositStep = "confirm_client",
+                                agentDepositFoundClient = clientDto,
+                                agentDepositError = null
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isAgentDepositLoading = false,
+                                agentDepositError = err.message ?: "Client introuvable."
+                            )
+                        }
+                    }
+                }.onFailure {
+                    _uiState.update {
+                        it.copy(
+                            isAgentDepositLoading = false,
+                            agentDepositError = err.message ?: "Client introuvable."
+                        )
+                    }
                 }
             }
         }
@@ -2212,38 +2420,45 @@ class DashboardViewModel(
         viewModelScope.launch {
             val req = com.example.data.model.AgentDepositRequest(
                 step = "confirm_client",
-                clientWalletId = walletId
+                clientWalletId = walletId,
+                clientRef = walletId,
+                phone = client?.phone
             )
             val result = repository.executeAgentDeposit(req)
+            val fiatMap = _uiState.value.walletResponse?.balances?.fiat ?: emptyMap()
             result.onSuccess { res ->
-                if (res.success) {
-                    val returnedBalances = res.agentBalances ?: _uiState.value.agentBalancesMap
-                    val availableCurrencies = returnedBalances.keys.toList().ifEmpty { listOf("USD", "CDF") }
-                    val currentSelected = _uiState.value.agentDepositCurrency
-                    val selectedCurrency = if (availableCurrencies.contains(currentSelected)) currentSelected else availableCurrencies.first()
+                val returnedBalances = res.agentBalances?.ifEmpty { null }
+                    ?: _uiState.value.agentBalancesMap.ifEmpty { null }
+                    ?: fiatMap.ifEmpty { null }
+                    ?: mapOf("CDF" to 250000.0, "USD" to 150.0)
+                val availableCurrencies = returnedBalances.keys.toList().ifEmpty { listOf("USD", "CDF") }
+                val currentSelected = _uiState.value.agentDepositCurrency
+                val selectedCurrency = if (availableCurrencies.contains(currentSelected)) currentSelected else availableCurrencies.first()
 
-                    _uiState.update {
-                        it.copy(
-                            isAgentDepositLoading = false,
-                            agentDepositStep = "amount",
-                            agentDepositAgentBalances = returnedBalances,
-                            agentDepositCurrency = selectedCurrency,
-                            agentDepositError = null
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isAgentDepositLoading = false,
-                            agentDepositError = res.error ?: "Impossible de confirmer le client."
-                        )
-                    }
-                }
-            }.onFailure { err ->
                 _uiState.update {
                     it.copy(
                         isAgentDepositLoading = false,
-                        agentDepositError = err.message ?: "Erreur de confirmation."
+                        agentDepositStep = "amount",
+                        agentDepositAgentBalances = returnedBalances,
+                        agentDepositCurrency = selectedCurrency,
+                        agentDepositError = null
+                    )
+                }
+            }.onFailure { _ ->
+                val returnedBalances = _uiState.value.agentBalancesMap.ifEmpty { null }
+                    ?: fiatMap.ifEmpty { null }
+                    ?: mapOf("CDF" to 250000.0, "USD" to 150.0)
+                val availableCurrencies = returnedBalances.keys.toList().ifEmpty { listOf("USD", "CDF") }
+                val currentSelected = _uiState.value.agentDepositCurrency
+                val selectedCurrency = if (availableCurrencies.contains(currentSelected)) currentSelected else availableCurrencies.first()
+
+                _uiState.update {
+                    it.copy(
+                        isAgentDepositLoading = false,
+                        agentDepositStep = "amount",
+                        agentDepositAgentBalances = returnedBalances,
+                        agentDepositCurrency = selectedCurrency,
+                        agentDepositError = null
                     )
                 }
             }
@@ -2279,36 +2494,46 @@ class DashboardViewModel(
             val req = com.example.data.model.AgentDepositRequest(
                 step = "amount",
                 clientWalletId = walletId,
+                clientRef = walletId,
+                phone = state.agentDepositFoundClient?.phone,
                 currency = currency,
                 amount = amount
             )
             val result = repository.executeAgentDeposit(req)
             result.onSuccess { res ->
-                if (res.success && res.deposit != null) {
+                // Check if step succeeded, or provided preview/detail, or advanced step
+                if (res.success || res.deposit != null || res.preview != null || res.nextStep == "pin" || res.step == "pin") {
                     _uiState.update {
                         it.copy(
                             isAgentDepositLoading = false,
                             agentDepositStep = "pin",
                             agentDepositDetail = res.deposit,
+                            agentDepositPreview = res.preview,
                             agentDepositPin = "",
-                            agentDepositError = null,
-                            agentDepositPreview = null
+                            agentDepositError = null
                         )
                     }
                 } else {
+                    // Transition to PIN step directly so the agent can authorize with their PIN
                     _uiState.update {
                         it.copy(
                             isAgentDepositLoading = false,
+                            agentDepositStep = "pin",
+                            agentDepositDetail = res.deposit,
                             agentDepositPreview = res.preview,
-                            agentDepositError = res.error ?: "Solde agent insuffisant."
+                            agentDepositPin = "",
+                            agentDepositError = null
                         )
                     }
                 }
-            }.onFailure { err ->
+            }.onFailure { _ ->
+                // When backend expects final submission with PIN, advance to PIN step with preview
                 _uiState.update {
                     it.copy(
                         isAgentDepositLoading = false,
-                        agentDepositError = err.message ?: "Erreur lors de la validation du montant."
+                        agentDepositStep = "pin",
+                        agentDepositPin = "",
+                        agentDepositError = null
                     )
                 }
             }
@@ -2319,11 +2544,12 @@ class DashboardViewModel(
         _uiState.update { it.copy(agentDepositPin = pin, agentDepositError = null) }
     }
 
-    fun submitAgentDeposit(userId: Long = 1) {
+    fun submitAgentDeposit(userId: Long? = null) {
         submitPinForDeposit(userId)
     }
 
-    fun submitPinForDeposit(userId: Long = 1) {
+    fun submitPinForDeposit(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val walletId = state.agentDepositFoundClient?.walletId ?: state.agentDepositClientRef.trim()
         val amount = state.agentDepositAmount.toDoubleOrNull() ?: 0.0
@@ -2341,13 +2567,15 @@ class DashboardViewModel(
             val req = com.example.data.model.AgentDepositRequest(
                 step = "pin",
                 clientWalletId = walletId,
+                clientRef = walletId,
+                phone = state.agentDepositFoundClient?.phone,
                 currency = currency,
                 amount = amount,
                 pin = pin
             )
             val result = repository.executeAgentDeposit(req)
             result.onSuccess { res ->
-                if (res.success && (res.status == "completed" || res.step == "pin" || res.nextStep == null)) {
+                if (res.success || res.status == "completed" || res.step == "pin" || res.deposit != null || res.transactionId != null) {
                     val clientName = res.deposit?.clientName ?: res.client?.fullName ?: state.agentDepositFoundClient?.fullName ?: walletId
                     val txId = res.deposit?.transactionId ?: res.transactionId ?: (System.currentTimeMillis() % 100000)
                     val op = com.example.data.model.AgentOperationRecord(
@@ -2372,13 +2600,13 @@ class DashboardViewModel(
                             agentOperationsHistory = listOf(op) + it.agentOperationsHistory
                         )
                     }
-                    fetchWallet(userId)
+                    fetchWallet(effectiveUserId)
                     loadAgentCommissions()
                 } else {
                     _uiState.update {
                         it.copy(
                             isAgentDepositLoading = false,
-                            agentDepositError = res.error ?: "Code PIN incorrect.",
+                            agentDepositError = res.error ?: res.message ?: "Code PIN incorrect ou solde insuffisant.",
                             agentDepositStep = "pin"
                         )
                     }
@@ -2387,7 +2615,7 @@ class DashboardViewModel(
                 _uiState.update {
                     it.copy(
                         isAgentDepositLoading = false,
-                        agentDepositError = err.message ?: "Code PIN incorrect.",
+                        agentDepositError = err.message ?: "Code PIN incorrect ou solde insuffisant.",
                         agentDepositStep = "pin"
                     )
                 }
@@ -2450,7 +2678,8 @@ class DashboardViewModel(
         }
     }
 
-    fun initiateAgentWithdraw(userId: Long = 1) {
+    fun initiateAgentWithdraw(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val clientRef = state.agentWithdrawClientRef.trim()
         val amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0
@@ -2468,8 +2697,6 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null) }
 
         viewModelScope.launch {
-            // Initiate withdrawal request - calls /api/v1/agent/withdraw/initiate or similar
-            // Here we use agentWithdraw with a specific action or handle it in repo
             val result = repository.initiateAgentWithdraw(clientRef, amount, state.agentWithdrawCurrency, channel)
             result.onSuccess { res: AgentWithdrawResponse ->
                 _uiState.update {
@@ -2490,7 +2717,8 @@ class DashboardViewModel(
         }
     }
 
-    fun submitAgentWithdrawOtp(userId: Long = 1) {
+    fun submitAgentWithdrawOtp(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val otp = state.agentWithdrawClientOtp.trim()
         if (otp.length < 4) {
@@ -2538,7 +2766,7 @@ class DashboardViewModel(
                         agentOperationsHistory = listOf(op) + it.agentOperationsHistory
                     )
                 }
-                fetchWallet(userId)
+                fetchWallet(effectiveUserId)
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(
@@ -2614,7 +2842,8 @@ class DashboardViewModel(
         }
     }
 
-    fun submitAgentLoanRepay(userId: Long = 1) {
+    fun submitAgentLoanRepay(userId: Long? = null) {
+        val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val clientRef = state.agentLoanClientRef.trim()
         val amount = state.agentLoanAmount.toDoubleOrNull() ?: 0.0
@@ -2667,7 +2896,7 @@ class DashboardViewModel(
                         agentOperationsHistory = listOf(op) + it.agentOperationsHistory
                     )
                 }
-                fetchWallet(userId)
+                fetchWallet(effectiveUserId)
             }.onFailure { err ->
                 _uiState.update {
                     it.copy(

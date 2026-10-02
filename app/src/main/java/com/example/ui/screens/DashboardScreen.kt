@@ -217,7 +217,8 @@ fun DashboardScreen(
                     onOpenQr = { showQrDialog = true },
                     onLogout = { authViewModel.logout() },
                     onSettingsClick = { showSettingsModal = true },
-                    onContactClick = { selectedContactForProfile = it }
+                    onContactClick = { selectedContactForProfile = it },
+                    onActionPlusClick = { showActionPlusDialog = true }
                 )
                 1 -> ToofanHistoryTab(
                     userProfile = userProfile,
@@ -616,6 +617,7 @@ fun DashboardScreen(
                 dashboardViewModel.closeTransferDialog()
                 dashboardViewModel.clearPrefilledTransfer()
             },
+            shape = RoundedCornerShape(12.dp),
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -642,58 +644,80 @@ fun DashboardScreen(
                     if (uiState.prefilledRecipient != null) {
                         // Display recipient confirmation card (Rule 12: Confirmation du correspondant)
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = ToofanGreen.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, ToofanGreen.copy(alpha = 0.3f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier.padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .border(1.dp, ToFocusBorderColor, CircleShape),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    val photoUrl = uiState.prefilledRecipient!!.profilePhotoUrl ?: uiState.prefilledRecipient!!.profilePhoto
-                                    if (!photoUrl.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = photoUrl,
-                                            contentDescription = "Avatar",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                        )
-                                    } else {
-                                        Icon(Icons.Default.Person, contentDescription = null, tint = ToFocusBorderColor)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                            .border(1.5.dp, ToFocusBorderColor, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val photoUrl = uiState.prefilledRecipient!!.profilePhotoUrl ?: uiState.prefilledRecipient!!.profilePhoto
+                                        val resolved = resolveAvatarUrl(photoUrl)
+                                        if (resolved != null) {
+                                            AsyncImage(
+                                                model = resolved,
+                                                contentDescription = "Avatar",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                            )
+                                        } else {
+                                            Icon(Icons.Default.Person, contentDescription = null, tint = ToFocusBorderColor)
+                                        }
                                     }
-                                }
-                                Column {
-                                    Text(
-                                        text = uiState.prefilledContactName ?: uiState.prefilledRecipient!!.fullName,
-                                        fontFamily = MulishFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ToofanMainDark
-                                    )
-                                    Text(
-                                        text = "ID Wallet : ${uiState.prefilledRecipient!!.walletId}",
-                                        fontFamily = MulishFontFamily,
-                                        fontSize = 11.sp,
-                                        color = ToofanBodyText
-                                    )
-                                    if (uiState.transferCurrency == "BTC" && uiState.prefilledRecipient!!.bitcoin?.available == true) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = uiState.prefilledContactName ?: uiState.prefilledRecipient!!.fullName,
+                                                fontFamily = MulishFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = ToofanMainDark
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = "Vérifié",
+                                                tint = Color(0xFF00C48C),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                         Text(
-                                            text = "BTC : ${uiState.prefilledRecipient!!.bitcoin?.address?.take(12)}...",
+                                            text = "ID Wallet : ${uiState.prefilledRecipient!!.walletId}",
                                             fontFamily = MulishFontFamily,
                                             fontSize = 11.sp,
-                                            color = ToFocusBorderColor,
-                                            fontWeight = FontWeight.Bold
+                                            color = ToofanBodyText
                                         )
+                                        if (uiState.transferCurrency == "BTC" && uiState.prefilledRecipient!!.bitcoin?.available == true) {
+                                            Text(
+                                                text = "BTC : ${uiState.prefilledRecipient!!.bitcoin?.address?.take(12)}...",
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 11.sp,
+                                                color = ToFocusBorderColor,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
+                                }
+                                TextButton(
+                                    onClick = { dashboardViewModel.clearPrefilledTransfer() },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Changer", fontFamily = MulishFontFamily, fontSize = 11.sp, color = Color(0xFF0066FF))
                                 }
                             }
                         }
@@ -701,7 +725,7 @@ fun DashboardScreen(
 
                     if (uiState.transferSuccess) {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = ToofanGreen.copy(alpha = 0.12f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -719,7 +743,7 @@ fun DashboardScreen(
                         }
                     } else if (uiState.transferStep == 2) {
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = Color(0xFFF7F9FB),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -736,18 +760,28 @@ fun DashboardScreen(
                             value = pinInput,
                             onValueChange = { pinInput = it.filter { ch -> ch.isDigit() }.take(4) },
                             label = { Text("Code PIN CashPay (4 chiffres)") },
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
                     } else {
-                        // Currency Selector (Rule 11: Sélection du canal de transfert)
+                        // Currency Selector with live user balances
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val availableCurrencies = listOf("USD", "EUR", "CDF", "BTC")
+                            val fiatMap = uiState.walletResponse?.balances?.fiat ?: emptyMap()
+                            val natCode = uiState.walletResponse?.nationalCurrency?.code ?: "CDF"
+                            val availableCurrencies = listOf("USD", "CDF", "EUR", "BTC")
                             availableCurrencies.forEach { curr ->
                                 val selected = uiState.transferCurrency == curr
+                                val balText = when (curr) {
+                                    "USD" -> "${String.format(java.util.Locale.US, "%.1f", fiatMap["USD"] ?: 0.0)}$"
+                                    "CDF" -> "${String.format(java.util.Locale.US, "%,.0f", fiatMap["CDF"] ?: (fiatMap[natCode] ?: 0.0))}F"
+                                    "EUR" -> "${String.format(java.util.Locale.US, "%.1f", fiatMap["EUR"] ?: 0.0)}€"
+                                    "BTC" -> "${String.format(java.util.Locale.US, "%.3f", uiState.walletResponse?.bitcoin?.balance ?: 0.0)}"
+                                    else -> ""
+                                }
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
@@ -766,24 +800,89 @@ fun DashboardScreen(
                                     color = if (selected) ToofanGreen else Color.White,
                                     border = BorderStroke(1.dp, if (selected) ToofanGreen else Color.LightGray)
                                 ) {
-                                    Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Column(
+                                        modifier = Modifier.padding(vertical = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
                                         Text(curr, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (selected) Color.White else ToofanMainDark)
+                                        Text(balText, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Color.White.copy(alpha = 0.9f) else Color.Gray)
                                     }
                                 }
                             }
                         }
 
                         if (uiState.prefilledRecipient == null) {
-                            ToofanInputField(
-                                value = uiState.transferRecipient,
-                                onValueChange = { dashboardViewModel.onRecipientChanged(it) },
-                                placeholder = "N° de téléphone ou Wallet ID"
-                            )
+                            // Dual Search Mode Selector (ID Wallet vs Phone)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val isWallet = uiState.transferSearchMode == "wallet"
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(34.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isWallet) Color(0xFF000E38) else Color.Transparent)
+                                        .clickable { dashboardViewModel.setTransferSearchMode("wallet") },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🆔 ID Wallet", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isWallet) Color.White else Color(0xFF475569))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(34.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (!isWallet) Color(0xFF000E38) else Color.Transparent)
+                                        .clickable { dashboardViewModel.setTransferSearchMode("phone") },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("📱 N° Téléphone", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (!isWallet) Color.White else Color(0xFF475569))
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = uiState.transferRecipient,
+                                    onValueChange = { dashboardViewModel.onRecipientChanged(it) },
+                                    label = {
+                                        Text(if (uiState.transferSearchMode == "wallet") "Entrer l'ID Wallet (ex: WAL-XXX)" else "Entrer le numéro (ex: +243...)")
+                                    },
+                                    placeholder = {
+                                        Text(if (uiState.transferSearchMode == "wallet") "WAL-123456" else "+243812345678")
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = { dashboardViewModel.searchTransferRecipient() },
+                                    enabled = !uiState.isSearchingTransferRecipient && uiState.transferRecipient.isNotBlank(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF000E38)),
+                                    modifier = Modifier.height(52.dp)
+                                ) {
+                                    if (uiState.isSearchingTransferRecipient) {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Default.Search, contentDescription = "Vérifier", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
                         }
+
                         ToofanInputField(
                             value = uiState.transferAmount,
                             onValueChange = { dashboardViewModel.onAmountChanged(it) },
-                            placeholder = "Montant"
+                            placeholder = "Montant à transférer"
                         )
                     }
 
@@ -811,7 +910,7 @@ fun DashboardScreen(
                     ToofanButton(
                         title = "Valider",
                         onClick = {
-                            dashboardViewModel.confirmTransfer(userId = 1, pin = pinInput)
+                            dashboardViewModel.confirmTransfer(pin = pinInput)
                         },
                         isLoading = uiState.isTransferLoading,
                         modifier = Modifier.width(100.dp)
@@ -819,7 +918,7 @@ fun DashboardScreen(
                 } else {
                     ToofanButton(
                         title = "Suivant",
-                        onClick = { dashboardViewModel.previewTransfer(userId = 1) },
+                        onClick = { dashboardViewModel.previewTransfer() },
                         isLoading = uiState.isTransferLoading,
                         modifier = Modifier.width(100.dp)
                     )
@@ -843,24 +942,25 @@ fun CashPayTopHeader(
     unreadNotifCount: Int,
     onNotificationClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    height: androidx.compose.ui.unit.Dp = 240.dp
+    height: androidx.compose.ui.unit.Dp = 240.dp,
+    onBackClick: (() -> Unit)? = null
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0C0926), // Cosmic deep OnChat midnight
-                        Color(0xFF161245),
-                        Color(0xFF221A5E)
+                        Color(0xFF000E38), // Official Brand Midnight Blue
+                        Color(0xFF0A1C4D),
+                        Color(0xFF16255C)
                     )
                 )
             )
     ) {
-        // Glowing ambient cosmic orbs as requested by user
+        // Glowing ambient cosmic orbs
         Box(
             modifier = Modifier
                 .size(170.dp)
@@ -874,36 +974,44 @@ fun CashPayTopHeader(
                 .align(Alignment.TopEnd)
                 .offset(x = 60.dp, y = (-30).dp)
                 .clip(CircleShape)
-                .background(Color(0xFFFF7A59).copy(alpha = 0.20f))
-        )
-        Box(
-            modifier = Modifier
-                .size(130.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 10.dp, y = 30.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF8B5CF6).copy(alpha = 0.22f))
+                .background(Color(0xFFFF6600).copy(alpha = 0.20f))
         )
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // User Avatar + Greeting
+                // Back button if subpage + User Avatar + Greeting
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (onBackClick != null) {
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Retour",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .border(1.5.dp, Color(0xFF00E5FF), CircleShape),
                         contentAlignment = Alignment.Center
@@ -1046,7 +1154,8 @@ private fun ToofanDashboardTab(
     onOpenQr: () -> Unit,
     onLogout: () -> Unit,
     onSettingsClick: () -> Unit = {},
-    onContactClick: (com.example.data.model.PhoneContact) -> Unit = {}
+    onContactClick: (com.example.data.model.PhoneContact) -> Unit = {},
+    onActionPlusClick: () -> Unit = {}
 ) {
     val pagerState = rememberPagerState(pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
@@ -1718,56 +1827,90 @@ private fun ToofanDashboardTab(
         }
 
         item {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (isAgentUser) 12.dp else 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (isAgentUser) 6.dp else 8.dp)
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (isAgentUser) {
+                // Ligne 1: 4 boutons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     ToofanActionSquare(
-                        title = "Services\nAgent",
-                        bgColor = Color(0xFF047857),
-                        icon = Icons.Default.SupportAgent,
+                        title = "Envoyer\nTransfert",
+                        bgColor = Color(0xFF0066FF),
+                        icon = Icons.Default.Send,
                         modifier = Modifier.weight(1f),
-                        onClick = { dashboardViewModel.openAgentServicesScreen() }
+                        onClick = onOpenTransfer
+                    )
+                    ToofanActionSquare(
+                        title = "Retrait\nEspèces",
+                        bgColor = Color(0xFFFF6600),
+                        icon = Icons.Default.CallReceived,
+                        modifier = Modifier.weight(1f),
+                        onClick = { dashboardViewModel.openWithdrawalDialog() }
+                    )
+                    ToofanActionSquare(
+                        title = "Crédit\n& Prêts",
+                        bgColor = Color(0xFF00B386),
+                        icon = Icons.Default.MonetizationOn,
+                        modifier = Modifier.weight(1f),
+                        onClick = { dashboardViewModel.openLoansDialog() }
+                    )
+                    ToofanActionSquare(
+                        title = if (isAgentUser) "Espace\nAgent" else "Scanner\n& Payer",
+                        bgColor = Color(0xFF000E38),
+                        icon = if (isAgentUser) Icons.Default.SupportAgent else Icons.Default.QrCode,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (isAgentUser) dashboardViewModel.openAgentServicesScreen()
+                            else onOpenQr()
+                        }
                     )
                 }
-                ToofanActionSquare(
-                    title = "Retrait\nEspèces",
-                    bgColor = Color(0xFFF59E0B),
-                    icon = Icons.Default.CallReceived,
-                    modifier = Modifier.weight(1f),
-                    onClick = { dashboardViewModel.openWithdrawalDialog() }
-                )
-                ToofanActionSquare(
-                    title = "Crédit\n& Prêts",
-                    bgColor = Color(0xFF00C48C),
-                    icon = Icons.Default.MonetizationOn,
-                    modifier = Modifier.weight(1f),
-                    onClick = { dashboardViewModel.openLoansDialog() }
-                )
-                ToofanActionSquare(
-                    title = "Money\nTransfer",
-                    bgColor = Color(0xFF2563EB),
-                    icon = Icons.Default.Send,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenTransfer
-                )
-                ToofanActionSquare(
-                    title = "Make a\nPayment",
-                    bgColor = Color(0xFFEAB308),
-                    icon = Icons.Default.CreditCard,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenTransfer
-                )
-                ToofanActionSquare(
-                    title = "Services &\nAbonnements",
-                    bgColor = Color(0xFF8B5CF6),
-                    icon = Icons.Default.Settings,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenServices
-                )
+
+                // Ligne 2: 4 boutons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ToofanActionSquare(
+                        title = "Dépôt\nRecharger",
+                        bgColor = Color(0xFF10B981),
+                        icon = Icons.Default.Add,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (isAgentUser) {
+                                dashboardViewModel.openAgentServicesScreen(0)
+                            } else {
+                                onOpenTransfer()
+                            }
+                        }
+                    )
+                    ToofanActionSquare(
+                        title = "Paiement\nFactures",
+                        bgColor = Color(0xFF8B5CF6),
+                        icon = Icons.Default.Receipt,
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenServices
+                    )
+                    ToofanActionSquare(
+                        title = "Mes\nCartes",
+                        bgColor = Color(0xFFEC4899),
+                        icon = Icons.Default.CreditCard,
+                        modifier = Modifier.weight(1f),
+                        onClick = { dashboardViewModel.setSelectedTab(2) }
+                    )
+                    ToofanActionSquare(
+                        title = "Voir\nPlus",
+                        bgColor = Color(0xFF64748B),
+                        icon = Icons.Default.FilterList,
+                        modifier = Modifier.weight(1f),
+                        onClick = onActionPlusClick
+                    )
+                }
             }
         }
 
@@ -3502,7 +3645,7 @@ fun ToofanCardsAndSecurityTab(
             unreadNotifCount = unreadNotifCount,
             onNotificationClick = { dashboardViewModel.openNotificationDialog() },
             onSettingsClick = { isCardsTabActive = false },
-            height = 140.dp
+            height = 190.dp
         )
 
         // Top Tab Selector
@@ -4573,8 +4716,24 @@ fun FundingTypePill(
     }
 }
 
+fun resolveAvatarUrl(raw: String?): Any? {
+    if (raw.isNullOrBlank()) return null
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("drawable:")) return trimmed
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+    if (trimmed.startsWith("data:image")) {
+        return try {
+            val base64Data = trimmed.substringAfter("base64,")
+            val decodedBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+            android.graphics.BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        } catch (_: Exception) { trimmed }
+    }
+    val clean = trimmed.removePrefix("/")
+    return "https://app.cashpay-all.com/$clean"
+}
+
 @Composable
-private fun ToofanActionSquare(
+fun ToofanActionSquare(
     title: String,
     bgColor: Color,
     icon: ImageVector,
@@ -4584,31 +4743,38 @@ private fun ToofanActionSquare(
     Surface(
         modifier = modifier
             .height(72.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(8.dp),
         color = bgColor,
-        shadowElevation = 2.dp
+        shadowElevation = 0.5.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 7.dp, vertical = 8.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.Start
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
             Text(
                 text = title,
                 fontFamily = MulishFontFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 9.sp,
-                lineHeight = 11.sp,
+                fontSize = 10.5.sp,
+                lineHeight = 12.sp,
                 color = Color.White
             )
         }
@@ -4640,10 +4806,11 @@ private fun RecentCorrespondentItem(
                     .background(Color(0xFFF1F5F9)),
                 contentAlignment = Alignment.Center
             ) {
-                val photoUrl = contact.publicProfile?.profilePhotoUrl ?: contact.publicProfile?.profilePhoto
+                val rawPhoto = contact.publicProfile?.profilePhotoUrl ?: contact.publicProfile?.profilePhoto
+                val resolved = resolveAvatarUrl(rawPhoto)
                 when {
-                    photoUrl?.startsWith("drawable:") == true -> {
-                        val res = when (photoUrl) {
+                    resolved is String && resolved.startsWith("drawable:") -> {
+                        val res = when (resolved) {
                             "drawable:avatar_jean" -> R.drawable.avatar_jean
                             "drawable:avatar_marie" -> R.drawable.avatar_marie
                             "drawable:avatar_koffi" -> R.drawable.avatar_koffi
@@ -4656,10 +4823,12 @@ private fun RecentCorrespondentItem(
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
                         )
                     }
-                    !photoUrl.isNullOrBlank() -> {
+                    resolved != null -> {
                         AsyncImage(
-                            model = photoUrl,
+                            model = resolved,
                             contentDescription = contact.name,
+                            placeholder = painterResource(id = R.drawable.avatar_jean),
+                            error = painterResource(id = R.drawable.avatar_jean),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
                         )
@@ -4744,17 +4913,18 @@ fun AddContactDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(12.dp),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF2563EB))
+                Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF0066FF))
                 Text(
                     text = "Ajouter un contact",
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+                    fontSize = 17.sp
                 )
             }
         },
@@ -4764,7 +4934,7 @@ fun AddContactDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Entrez le numéro de téléphone pour vérifier son compte CashPay :",
+                    text = "Rechercher par Numéro de téléphone ou Wallet ID :",
                     fontSize = 13.sp,
                     fontFamily = MulishFontFamily,
                     color = Color(0xFF64748B)
@@ -4773,7 +4943,7 @@ fun AddContactDialog(
                 ToofanInputField(
                     value = uiState.addContactPhone,
                     onValueChange = { dashboardViewModel.setAddContactPhone(it) },
-                    placeholder = "Ex: 0899123456 ou 899123456"
+                    placeholder = "Ex: +243899... ou WAL-XXXX"
                 )
 
                 if (uiState.isSearchingAddContact) {

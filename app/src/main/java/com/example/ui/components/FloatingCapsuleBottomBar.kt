@@ -44,9 +44,9 @@ fun FloatingCapsuleBottomBar(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         color = Color.White,
-        shadowElevation = 16.dp,
+        shadowElevation = 8.dp,
         border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         modifier = modifier
             .fillMaxWidth()

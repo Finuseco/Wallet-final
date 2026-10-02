@@ -25,6 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.MonetizationOn
+import com.example.ui.components.FloatingCapsuleBottomBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -151,156 +155,115 @@ fun AgentServicesDialog(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF0F172A),
-                    shadowElevation = 4.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp, bottom = 12.dp)
-                    ) {
-                        // Top bar row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(
-                                    onClick = onDismiss,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Retour",
-                                        tint = Color.White
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Espace Agent CashPay",
-                                            fontFamily = MulishFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 17.sp,
-                                            color = Color.White
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.Verified,
-                                            contentDescription = "Agréé",
-                                            tint = Color(0xFF00C48C),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Text(
-                                        text = "Portail Opérations Financières & Commissions",
-                                        fontFamily = MulishFontFamily,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF94A3B8)
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = onOpenQrScanner,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .background(Color(0xFF1E293B), CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.QrCodeScanner,
-                                    contentDescription = "Scanner QR Client",
-                                    tint = Color(0xFF00C48C),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        // Agent Profile Banner
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF1E293B)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .background(Color(0xFF00C48C).copy(alpha = 0.2f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.SupportAgent,
-                                            contentDescription = null,
-                                            tint = Color(0xFF00C48C),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = userProfile?.fullName ?: "Agent FINUSECO",
-                                            fontFamily = MulishFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = "Wallet ID : ${userProfile?.walletId ?: ""}",
-                                            fontFamily = MulishFontFamily,
-                                            fontSize = 11.sp,
-                                            color = Color(0xFFCBD5E1)
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = Color(0xFF00C48C).copy(alpha = 0.2f)
-                                ) {
-                                    Text(
-                                        text = "AGENT ACTIF",
-                                        fontFamily = MulishFontFamily,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 10.sp,
-                                        color = Color(0xFF00C48C),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                CashPayTopHeader(
+                    userProfile = userProfile,
+                    unreadNotifCount = 0,
+                    onNotificationClick = { /* no-op */ },
+                    onSettingsClick = { /* no-op */ },
+                    height = 200.dp,
+                    onBackClick = onDismiss
+                )
+            },
+            bottomBar = {
+                FloatingCapsuleBottomBar(
+                    selectedTab = 0,
+                    onTabSelected = { tab ->
+                        onDismiss()
+                        onTabSelected(tab)
+                    },
+                    onCentralActionClick = onDismiss
+                )
             }
         ) { paddingValues ->
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(Color(0xFFF8FAFC)),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .background(Color(0xFFF8F9FD)),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Agent Profile Banner
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shadowElevation = 0.5.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .background(Color(0xFF10B981).copy(alpha = 0.15f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SupportAgent,
+                                        contentDescription = null,
+                                        tint = Color(0xFF047857),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Espace Agent CashPay Agréé",
+                                            fontFamily = MulishFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF0F172A)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Verified,
+                                            contentDescription = "Agréé",
+                                            tint = Color(0xFF00C48C),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "ID Wallet : ${userProfile?.walletId ?: "Agent Actif"}",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B)
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFECFDF5)
+                            ) {
+                                Text(
+                                    text = "AGENT ACTIF",
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF047857),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Commission Cards Section (Clean Container)
                 item {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp)
+                            .padding(top = 4.dp)
                     ) {
                         Text(
                             text = "Vos Soldes Commissions",
@@ -308,15 +271,15 @@ fun AgentServicesDialog(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = Color(0xFF0F172A),
-                            modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp)
+                            modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp)
                         )
 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             val commMap = if (uiState.agentCommissionsMap.isNotEmpty()) {
                                 uiState.agentCommissionsMap
@@ -344,34 +307,34 @@ fun AgentServicesDialog(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(12.dp),
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = Color(0xFFF1F5F9),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.SwapHoriz,
                                 contentDescription = null,
                                 tint = Color(0xFF64748B),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Basculez vos commissions vers votre compte principal instantanément.",
                                 fontFamily = MulishFontFamily,
                                 fontSize = 11.sp,
                                 color = Color(0xFF475569),
-                                lineHeight = 15.sp
+                                lineHeight = 14.sp
                             )
                         }
                     }
                 }
 
-                // Section Action Shortcuts (Services Concernés)
+                // Section Action Shortcuts (Services Concernés) - Identical to Dashboard Buttons
                 item {
                     Text(
                         text = "Services Opérationnels Agent",
@@ -388,105 +351,119 @@ fun AgentServicesDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // Ligne 1: 4 boutons identiques au dashboard
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            AgentActionSquare(
+                            ToofanActionSquare(
                                 title = "Dépôt\nClient",
-                                subtitle = "Espèces → Wallet",
+                                bgColor = Color(0xFF059669),
                                 icon = Icons.Default.ArrowDownward,
-                                color = Color(0xFF059669),
                                 modifier = Modifier.weight(1f),
                                 onClick = { activeModal = "deposit" }
                             )
 
-                            AgentActionSquare(
+                            ToofanActionSquare(
                                 title = "Retrait\nClient",
-                                subtitle = "Confirmation par OTP",
+                                bgColor = Color(0xFFFF6600),
                                 icon = Icons.Default.ArrowUpward,
-                                color = Color(0xFFD97706),
                                 modifier = Modifier.weight(1f),
                                 onClick = { activeModal = "withdraw" }
                             )
-                        }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            AgentActionSquare(
-                                title = "Scanner\nWallet",
-                                subtitle = "QR Code Client",
-                                icon = Icons.Default.QrCodeScanner,
-                                color = Color(0xFF2563EB),
-                                modifier = Modifier.weight(1f),
-                                onClick = onOpenQrScanner
-                            )
-
-                            AgentActionSquare(
+                            ToofanActionSquare(
                                 title = "Prêt\nLoan Me",
-                                subtitle = "Remboursement Client",
+                                bgColor = Color(0xFF7C3AED),
                                 icon = Icons.Default.Payments,
-                                color = Color(0xFF7C3AED),
                                 modifier = Modifier.weight(1f),
                                 onClick = { activeModal = "loan" }
                             )
+
+                            ToofanActionSquare(
+                                title = "Scanner\nQR Client",
+                                bgColor = Color(0xFF000E38),
+                                icon = Icons.Default.QrCodeScanner,
+                                modifier = Modifier.weight(1f),
+                                onClick = onOpenQrScanner
+                            )
                         }
 
-                        // Full width tile for History
-                        Surface(
+                        // Ligne 2: 2 boutons d'actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ToofanActionSquare(
+                                title = "Historique\nOpérations",
+                                bgColor = Color(0xFF0066FF),
+                                icon = Icons.Default.Receipt,
+                                modifier = Modifier.weight(1f),
+                                onClick = { activeModal = "history" }
+                            )
+
+                            ToofanActionSquare(
+                                title = "Balayer\nCommissions",
+                                bgColor = Color(0xFF00B386),
+                                icon = Icons.Default.SwapHoriz,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onOpenSweepDialog("USD") }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .clickable { activeModal = "history" },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shadowElevation = 0.5.dp
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { activeModal = "history" },
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                            shadowElevation = 0.5.dp
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .background(Color(0xFF0F172A).copy(alpha = 0.08f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.History,
-                                            contentDescription = null,
-                                            tint = Color(0xFF0F172A),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = "Historique des Opérations Agent",
-                                        fontFamily = MulishFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color(0xFF0F172A)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .background(Color(0xFF0F172A).copy(alpha = 0.08f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.History,
+                                        contentDescription = null,
+                                        tint = Color(0xFF0F172A),
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = "${uiState.agentOperationsHistory.size} op.",
+                                    text = "Historique des Opérations Agent",
                                     fontFamily = MulishFontFamily,
-                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF64748B)
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF0F172A)
                                 )
                             }
+
+                            Text(
+                                text = "${uiState.agentOperationsHistory.size} op.",
+                                fontFamily = MulishFontFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF64748B)
+                            )
                         }
                     }
                 }
