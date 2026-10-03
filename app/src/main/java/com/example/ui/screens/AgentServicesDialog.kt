@@ -103,7 +103,7 @@ fun AgentServicesDialog(
     uiState: DashboardUiState,
     userProfile: UserProfileEntity?,
     onDismiss: () -> Unit,
-    onOpenQrScanner: () -> Unit,
+    onOpenQrScanner: (String) -> Unit = {},
     onTabSelected: (Int) -> Unit,
     onToggleAgentBalanceVisibility: () -> Unit,
     onCentralActionClick: () -> Unit,
@@ -269,7 +269,7 @@ fun AgentServicesDialog(
                                 bgColor = Color(0xFF000E38),
                                 icon = Icons.Default.QrCodeScanner,
                                 modifier = Modifier.weight(1f),
-                                onClick = onOpenQrScanner
+                                onClick = { onOpenQrScanner("agent_withdraw") }
                             )
                         }
 
@@ -314,7 +314,10 @@ fun AgentServicesDialog(
     if (activeModal == "deposit") {
         AgentDepositModal(
             uiState = uiState,
-            onClose = { activeModal = null },
+            onClose = { 
+                onResetDeposit()
+                activeModal = null 
+            },
             onClientRefChange = onDepositClientRefChange,
             onSearchClient = onSearchDepositClient,
             onConfirmClient = onConfirmDepositClient,
@@ -325,7 +328,7 @@ fun AgentServicesDialog(
             onSubmitPin = onSubmitDepositPin,
             onSubmit = onSubmitDeposit,
             onReset = onResetDeposit,
-            onOpenQrScanner = onOpenQrScanner
+            onOpenQrScanner = { onOpenQrScanner("agent_deposit") }
         )
     }
 
@@ -333,7 +336,10 @@ fun AgentServicesDialog(
     if (activeModal == "withdraw") {
         AgentWithdrawModal(
             uiState = uiState,
-            onClose = { activeModal = null },
+            onClose = { 
+                onResetWithdraw()
+                activeModal = null 
+            },
             onClientRefChange = onWithdrawClientRefChange,
             onAmountChange = onWithdrawAmountChange,
             onCurrencyChange = onWithdrawCurrencyChange,
@@ -342,7 +348,7 @@ fun AgentServicesDialog(
             onInitiate = onInitiateWithdraw,
             onSubmitOtp = onSubmitWithdrawOtp,
             onReset = onResetWithdraw,
-            onOpenQrScanner = onOpenQrScanner
+            onOpenQrScanner = { onOpenQrScanner("agent_withdraw") }
         )
     }
 
@@ -350,7 +356,10 @@ fun AgentServicesDialog(
     if (activeModal == "loan") {
         AgentLoanModal(
             uiState = uiState,
-            onClose = { activeModal = null },
+            onClose = { 
+                onResetLoanRepay()
+                activeModal = null 
+            },
             onClientRefChange = onLoanClientRefChange,
             onSearchTarget = onSearchLoanTarget,
             onAmountChange = onLoanAmountChange,
@@ -358,7 +367,7 @@ fun AgentServicesDialog(
             onPinChange = onLoanPinChange,
             onSubmit = onSubmitLoanRepay,
             onReset = onResetLoanRepay,
-            onOpenQrScanner = onOpenQrScanner
+            onOpenQrScanner = { onOpenQrScanner("agent_loan") }
         )
     }
 
@@ -1794,7 +1803,20 @@ private fun AgentLoanModal(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = onOpenQrScanner,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scanner",
+                            tint = Color(0xFF00C48C)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                     IconButton(
                         onClick = onSearchTarget,
                         enabled = !uiState.isAgentSearchingLoan,
@@ -1820,6 +1842,46 @@ private fun AgentLoanModal(
                 }
 
                 val target = uiState.agentLoanTarget
+                if (target != null && target.loan == null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF1F5F9)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Client : ${target.client?.name ?: "Client CashPay"}",
+                                fontFamily = MulishFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF0F172A)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Ce client n'a aucun prêt en cours ou aucune dette à rembourser.",
+                                fontFamily = MulishFontFamily,
+                                fontSize = 12.5.sp,
+                                color = Color(0xFF64748B),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    onReset()
+                                    onClose()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B))
+                            ) {
+                                Text("Fermer", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 if (target?.loan != null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -1887,6 +1949,19 @@ private fun AgentLoanModal(
                             Text("Confirmer le Remboursement", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        onReset()
+                        onClose()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Annuler / Sortir", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
                 }
             }
         }

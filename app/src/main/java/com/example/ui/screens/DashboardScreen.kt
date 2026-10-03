@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -185,12 +186,14 @@ fun DashboardScreen(
     var showSettingsModal by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showQrScannerDialog by remember { mutableStateOf(false) }
+    var qrScanTarget by remember { mutableStateOf("transfer") } // "transfer", "agent_deposit", "agent_withdraw", "agent_loan"
     var selectedContactForProfile by remember { mutableStateOf<com.example.data.model.PhoneContact?>(null) }
 
     var showServicesDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             FloatingCapsuleBottomBar(
                 selectedTab = uiState.selectedTab,
@@ -204,7 +207,7 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ToofanBgColor)
-                .padding(innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             when (uiState.selectedTab) {
                 0 -> ToofanDashboardTab(
@@ -348,7 +351,10 @@ fun DashboardScreen(
         uiState = uiState,
         userProfile = userProfile,
         onDismiss = { dashboardViewModel.closeAgentServicesScreen() },
-        onOpenQrScanner = { showQrScannerDialog = true },
+        onOpenQrScanner = { target ->
+            qrScanTarget = target
+            showQrScannerDialog = true
+        },
         onTabSelected = { dashboardViewModel.setAgentActiveTab(it) },
         onToggleAgentBalanceVisibility = { dashboardViewModel.toggleAgentBalanceVisibility() },
         onCentralActionClick = { showActionPlusDialog = true },
@@ -500,14 +506,36 @@ fun DashboardScreen(
         )
     }
 
-    // Live Camera QR Scanner Dialog
+    // Live Camera QR Scanner Dialog with instant automatic search
     if (showQrScannerDialog) {
         QrScannerDialog(
-            onDismissRequest = { showQrScannerDialog = false },
+            onDismissRequest = { 
+                showQrScannerDialog = false 
+                qrScanTarget = "transfer"
+            },
             onQrScanned = { result ->
-                val cleaned = result.removePrefix("cashpay:").removePrefix("bitcoin:").substringBefore("?")
-                dashboardViewModel.onRecipientChanged(cleaned)
-                dashboardViewModel.openTransferDialog()
+                val cleaned = extractRecipientFromQr(result)
+                when (qrScanTarget) {
+                    "agent_withdraw" -> {
+                        dashboardViewModel.setAgentWithdrawClientRef(cleaned)
+                        dashboardViewModel.searchAndIdentifyClientForWithdraw()
+                    }
+                    "agent_deposit" -> {
+                        dashboardViewModel.setAgentDepositClientRef(cleaned)
+                        dashboardViewModel.searchAndIdentifyClientForDeposit()
+                    }
+                    "agent_loan" -> {
+                        dashboardViewModel.setAgentLoanClientRef(cleaned)
+                        dashboardViewModel.searchAgentLoanTarget()
+                    }
+                    else -> {
+                        dashboardViewModel.onRecipientChanged(cleaned)
+                        dashboardViewModel.openTransferDialog()
+                        dashboardViewModel.searchTransferRecipient()
+                    }
+                }
+                showQrScannerDialog = false
+                qrScanTarget = "transfer"
             }
         )
     }
@@ -6299,5 +6327,33 @@ private fun readAndSyncPhoneContacts(context: Context, dashboardViewModel: Dashb
     } catch (e: Exception) {
         // Handled gracefully
     }
+}
+
+private fun extractRecipientFromQr(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        try {
+            val json = org.json.JSONObject(trimmed)
+            val wallet = json.optString("walletId", json.optString("wallet", json.optString("receiverWalletId", json.optString("clientWalletId", ""))))
+            if (wallet.isNotBlank()) return wallet
+            val phone = json.optString("phone", json.optString("phoneNumber", ""))
+            if (phone.isNotBlank()) return phone
+            val target = json.optString("target", json.optString("recipient", ""))
+            if (target.isNotBlank()) return target
+        } catch (_: Exception) {}
+    }
+    var clean = trimmed
+    if (clean.startsWith("cashpay://", ignoreCase = true)) clean = clean.substring(10)
+    else if (clean.startsWith("cashpay:", ignoreCase = true)) clean = clean.substring(8)
+    else if (clean.startsWith("bitcoin:", ignoreCase = true)) clean = clean.substring(8)
+
+    if (clean.contains("wallet=")) {
+        clean = clean.substringAfter("wallet=").substringBefore("&")
+    } else if (clean.contains("receiver=")) {
+        clean = clean.substringAfter("receiver=").substringBefore("&")
+    } else if (clean.contains("?")) {
+        clean = clean.substringBefore("?")
+    }
+    return clean.trim()
 }
 

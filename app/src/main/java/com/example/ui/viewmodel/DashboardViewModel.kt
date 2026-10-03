@@ -834,13 +834,7 @@ class DashboardViewModel(
         }
         _uiState.update { it.copy(isSearchingTransferRecipient = true, transferError = null) }
         viewModelScope.launch {
-            val isPhone = _uiState.value.transferSearchMode == "phone" || (raw.all { it.isDigit() || it == '+' || it == ' ' } && raw.filter { it.isDigit() }.length >= 8)
-            val result = if (isPhone) {
-                repository.searchProfileByPhone(raw)
-            } else {
-                repository.searchProfileByWallet(raw)
-            }
-            result.onSuccess { pubResp ->
+            resolveProfile(raw).onSuccess { pubResp ->
                 val profile = pubResp.profile
                 if (profile != null) {
                     _uiState.update {
@@ -1318,47 +1312,97 @@ class DashboardViewModel(
         _uiState.update { it.copy(withdrawalCurrency = currency, withdrawalPreviewError = null) }
     }
 
-    private suspend fun resolveProfile(identifier: String): Result<com.example.data.model.PublicProfileResponse> {
+    suspend fun resolveProfile(identifier: String): Result<com.example.data.model.PublicProfileResponse> {
         val trimmed = identifier.trim()
         if (trimmed.isEmpty()) return Result.failure(Exception("Identifiant vide"))
-        
-        // Identification plus robuste pour les agents via action start
-        val req = com.example.data.model.WithdrawActionRequest(
+
+        // 1. Direct Wallet / Client Search in Repository
+        val walletRes = repository.searchProfileByWallet(trimmed)
+        if (walletRes.isSuccess && walletRes.getOrNull()?.found == true) {
+            return walletRes
+        }
+
+        // 2. Direct Phone Search if numerical digits present
+        val digits = trimmed.filter { it.isDigit() }
+        if (digits.length >= 8) {
+            val phoneRes = repository.searchProfileByPhone(trimmed)
+            if (phoneRes.isSuccess && phoneRes.getOrNull()?.found == true) {
+                return phoneRes
+            }
+        }
+
+        // 3. Client withdraw start action (resolves client account by wallet ID or phone)
+        val clientReq = com.example.data.model.WithdrawActionRequest(
+            operation = "client_withdraw",
+            action = "start",
+            identifier = trimmed,
+            clientWalletId = trimmed,
+            phone = if (digits.length >= 8) trimmed else null
+        )
+        try {
+            val cRes = repository.withdrawAction(clientReq)
+            if (cRes.isSuccess && cRes.getOrNull()?.target != null) {
+                val target = cRes.getOrNull()!!.target!!
+                return Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = com.example.data.model.PublicProfileDto(
+                        walletId = target.walletId ?: trimmed,
+                        fullName = target.fullName ?: target.firstName ?: trimmed,
+                        role = target.role,
+                        profilePhotoUrl = target.avatar,
+                        profilePhoto = target.avatar
+                    )
+                ))
+            }
+        } catch (_: Exception) {}
+
+        // 4. Agent withdraw start action (resolves agent account)
+        val agentReq = com.example.data.model.WithdrawActionRequest(
             operation = "agent_withdraw",
             action = "start",
-            identifier = trimmed
+            identifier = trimmed,
+            agentWalletId = trimmed,
+            phone = if (digits.length >= 8) trimmed else null
         )
-        return try {
-            val res = repository.withdrawAction(req)
-            if (res.isSuccess && res.getOrNull()?.success == true) {
-                val target = res.getOrNull()?.target
-                if (target != null) {
-                    return Result.success(com.example.data.model.PublicProfileResponse(
-                        success = true,
-                        found = true,
-                        profile = com.example.data.model.PublicProfileDto(
-                            walletId = target.walletId ?: trimmed,
-                            fullName = target.fullName ?: target.firstName ?: trimmed,
-                            role = target.role,
-                            profilePhotoUrl = target.avatar,
-                            profilePhoto = target.avatar
-                        )
-                    ))
-                }
+        try {
+            val aRes = repository.withdrawAction(agentReq)
+            if (aRes.isSuccess && aRes.getOrNull()?.target != null) {
+                val target = aRes.getOrNull()!!.target!!
+                return Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = com.example.data.model.PublicProfileDto(
+                        walletId = target.walletId ?: trimmed,
+                        fullName = target.fullName ?: target.firstName ?: trimmed,
+                        role = target.role,
+                        profilePhotoUrl = target.avatar,
+                        profilePhoto = target.avatar
+                    )
+                ))
             }
-            
-            // Fallback to standard search if specific action fails
-            val isNumeric = trimmed.all { it.isDigit() || it == '+' }
-            if (isNumeric && trimmed.length >= 9) {
-                val phoneRes = repository.searchProfileByPhone(trimmed)
-                if (phoneRes.isSuccess && phoneRes.getOrNull()?.found == true) {
-                    return phoneRes
-                }
+        } catch (_: Exception) {}
+
+        // 5. Loan Target lookup
+        try {
+            val loanRes = repository.getAgentLoanTarget(trimmed)
+            if (loanRes.isSuccess && loanRes.getOrNull()?.client != null) {
+                val c = loanRes.getOrNull()!!.client!!
+                return Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = com.example.data.model.PublicProfileDto(
+                        walletId = c.walletId ?: trimmed,
+                        fullName = c.name ?: trimmed,
+                        role = "client",
+                        profilePhotoUrl = null,
+                        profilePhoto = null
+                    )
+                ))
             }
-            repository.searchProfileByWallet(trimmed)
-        } catch (e: Exception) {
-            repository.searchProfileByWallet(trimmed)
-        }
+        } catch (_: Exception) {}
+
+        return Result.failure(Exception("Portefeuille ou utilisateur introuvable."))
     }
 
     fun searchAgentAndProceed() {
@@ -2705,57 +2749,63 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null, agentWithdrawFoundClient = null) }
 
         viewModelScope.launch {
-            // Identification plus robuste via l'action start spécifique au retrait client par agent
+            val digits = clientRef.filter { it.isDigit() }
+            val isPhone = digits.length >= 8 && clientRef.all { it.isDigit() || it == '+' || it == ' ' }
             val req = com.example.data.model.WithdrawActionRequest(
                 operation = "client_withdraw",
                 action = "start",
-                identifier = clientRef
+                identifier = clientRef,
+                clientWalletId = clientRef,
+                phone = if (isPhone) clientRef else null
             )
-            repository.withdrawAction(req)
-                .onSuccess { resp ->
-                    _uiState.update { it.copy(isAgentWithdrawLoading = false) }
-                    if (resp.success && resp.target != null) {
+            val res = repository.withdrawAction(req)
+            val resp = res.getOrNull()
+            val target = resp?.target
+            if (res.isSuccess && resp?.success == true && target != null) {
+                _uiState.update {
+                    it.copy(
+                        isAgentWithdrawLoading = false,
+                        agentWithdrawFoundClient = com.example.data.model.PublicProfileDto(
+                            walletId = target.walletId ?: clientRef,
+                            fullName = target.fullName ?: target.firstName ?: clientRef,
+                            role = target.role,
+                            profilePhotoUrl = target.avatar,
+                            profilePhoto = target.avatar
+                        ),
+                        agentWithdrawOperationId = resp.operationId,
+                        agentWithdrawStep = 2,
+                        agentWithdrawError = null
+                    )
+                }
+            } else {
+                // Multi-tier fallback resolution
+                resolveProfile(clientRef).onSuccess { pResp ->
+                    if (pResp.success && pResp.found && pResp.profile != null) {
                         _uiState.update {
                             it.copy(
-                                agentWithdrawFoundClient = com.example.data.model.PublicProfileDto(
-                                    walletId = resp.target.walletId ?: clientRef,
-                                    fullName = resp.target.fullName ?: resp.target.firstName ?: clientRef,
-                                    role = resp.target.role,
-                                    profilePhotoUrl = resp.target.avatar,
-                                    profilePhoto = resp.target.avatar
-                                ),
-                                agentWithdrawOperationId = resp.operationId,
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawFoundClient = pResp.profile,
                                 agentWithdrawStep = 2,
                                 agentWithdrawError = null
                             )
                         }
                     } else {
-                        // Tentative de résolution de secours via recherche standard
-                        resolveProfile(clientRef).onSuccess { pResp ->
-                             if (pResp.success && pResp.found && pResp.profile != null) {
-                                 _uiState.update {
-                                    it.copy(
-                                        agentWithdrawFoundClient = pResp.profile,
-                                        agentWithdrawStep = 2,
-                                        agentWithdrawError = null
-                                    )
-                                }
-                             } else {
-                                 _uiState.update { it.copy(agentWithdrawError = resp.error ?: "Client introuvable. Vérifiez l'identifiant.") }
-                             }
-                        }.onFailure {
-                             _uiState.update { it.copy(agentWithdrawError = resp.error ?: "Client introuvable.") }
+                        _uiState.update {
+                            it.copy(
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawError = res.getOrNull()?.error ?: "Client introuvable. Vérifiez l'identifiant."
+                            )
                         }
                     }
-                }
-                .onFailure { err ->
+                }.onFailure { err ->
                     _uiState.update {
                         it.copy(
                             isAgentWithdrawLoading = false,
-                            agentWithdrawError = err.message ?: "Client introuvable."
+                            agentWithdrawError = res.getOrNull()?.error ?: err.message ?: "Client introuvable."
                         )
                     }
                 }
+            }
         }
     }
 
@@ -2937,28 +2987,59 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentSearchingLoan = true, agentLoanSearchError = null, agentLoanTarget = null) }
 
         viewModelScope.launch {
-            // First resolve profile to be sure client exists
+            // 1. Try direct loan target query
+            val directLoanRes = repository.getAgentLoanTarget(clientRef)
+            if (directLoanRes.isSuccess && directLoanRes.getOrNull()?.client != null) {
+                val resp = directLoanRes.getOrNull()!!
+                _uiState.update {
+                    it.copy(
+                        isAgentSearchingLoan = false,
+                        agentLoanTarget = resp,
+                        agentLoanAmount = resp.loan?.remainingBalance?.toString() ?: "",
+                        agentLoanCurrency = resp.loan?.currency ?: "USD",
+                        agentLoanStep = 2,
+                        agentLoanSearchError = if (resp.loan == null) "Ce client n'a aucun prêt en cours à rembourser." else null
+                    )
+                }
+                return@launch
+            }
+
+            // 2. Resolve client profile first via multi-tier search
             resolveProfile(clientRef).onSuccess { pResp ->
                 if (pResp.success && pResp.found && pResp.profile != null) {
-                    // Then search for their loan
-                    repository.getAgentLoanTarget(pResp.profile.walletId)
+                    val walletId = pResp.profile.walletId
+                    repository.getAgentLoanTarget(walletId)
                         .onSuccess { resp ->
                             _uiState.update {
                                 it.copy(
                                     isAgentSearchingLoan = false,
-                                    agentLoanTarget = resp,
+                                    agentLoanTarget = if (resp.client == null) {
+                                        resp.copy(client = com.example.data.model.AgentClientInfo(
+                                            name = pResp.profile.fullName,
+                                            walletId = pResp.profile.walletId
+                                        ))
+                                    } else resp,
                                     agentLoanAmount = resp.loan?.remainingBalance?.toString() ?: "",
                                     agentLoanCurrency = resp.loan?.currency ?: "USD",
-                                    agentLoanStep = 2, // Move to Amount step
-                                    agentLoanSearchError = if (!resp.success) resp.error ?: "Ce client n’a pas de prêt actif." else null
+                                    agentLoanStep = 2,
+                                    agentLoanSearchError = if (resp.loan == null) "Ce client n'a aucun prêt en cours à rembourser." else null
                                 )
                             }
                         }
-                        .onFailure { err ->
+                        .onFailure {
+                            // Client exists, but no active loan
                             _uiState.update {
                                 it.copy(
                                     isAgentSearchingLoan = false,
-                                    agentLoanSearchError = "Ce client n’a pas de prêt actif à rembourser."
+                                    agentLoanTarget = com.example.data.model.AgentLoanTargetResponse(
+                                        success = true,
+                                        client = com.example.data.model.AgentClientInfo(
+                                            name = pResp.profile.fullName,
+                                            walletId = pResp.profile.walletId
+                                        ),
+                                        loan = null
+                                    ),
+                                    agentLoanSearchError = "Ce client n'a aucun prêt en cours à rembourser."
                                 )
                             }
                         }

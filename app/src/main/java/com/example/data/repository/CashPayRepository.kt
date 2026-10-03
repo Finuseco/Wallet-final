@@ -840,8 +840,11 @@ class CashPayRepository(
     }
 
     suspend fun searchProfileByWallet(walletId: String): Result<com.example.data.model.PublicProfileResponse> {
-        return try {
-            val trimmed = walletId.trim()
+        val trimmed = walletId.trim()
+        if (trimmed.isBlank()) return Result.failure(Exception("Identifiant vide"))
+
+        // 1. Try agent deposit identify endpoint (identifies clients by wallet ID or ref)
+        try {
             val identifyReq = com.example.data.model.AgentDepositRequest(
                 step = "identify",
                 clientWalletId = trimmed,
@@ -864,22 +867,75 @@ class CashPayRepository(
                     profilePhotoUrl = fullPhotoUrl,
                     profilePhoto = fullPhotoUrl
                 )
-                Result.success(com.example.data.model.PublicProfileResponse(
+                return Result.success(com.example.data.model.PublicProfileResponse(
                     success = true,
                     found = true,
                     profile = profileDto
                 ))
-            } else {
-                // If it contains digits, fallback to searchProfileByPhone
-                if (trimmed.any { it.isDigit() }) {
-                    searchProfileByPhone(trimmed)
-                } else {
-                    Result.failure(Exception("Portefeuille introuvable."))
-                }
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (_: Exception) {}
+
+        // 2. Try client withdraw start action (resolves client wallet ID or ref)
+        try {
+            val wReq = com.example.data.model.WithdrawActionRequest(
+                operation = "client_withdraw",
+                action = "start",
+                identifier = trimmed,
+                clientWalletId = trimmed
+            )
+            val wRes = withdrawAction(wReq)
+            if (wRes.isSuccess && wRes.getOrNull()?.target != null) {
+                val target = wRes.getOrNull()!!.target!!
+                val photo = target.avatar
+                val fullPhotoUrl = when {
+                    !photo.isNullOrBlank() && (photo.startsWith("http://") || photo.startsWith("https://")) -> photo
+                    !photo.isNullOrBlank() && photo.startsWith("/") -> "https://app.cashpay-all.com$photo"
+                    !photo.isNullOrBlank() -> "https://app.cashpay-all.com/$photo"
+                    else -> null
+                }
+                return Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = com.example.data.model.PublicProfileDto(
+                        walletId = target.walletId ?: trimmed,
+                        fullName = target.fullName ?: target.firstName ?: trimmed,
+                        role = target.role,
+                        profilePhotoUrl = fullPhotoUrl,
+                        profilePhoto = fullPhotoUrl
+                    )
+                ))
+            }
+        } catch (_: Exception) {}
+
+        // 3. Fallback to phone search if it has digits
+        val digits = trimmed.filter { it.isDigit() }
+        if (digits.length >= 8) {
+            val phoneRes = searchProfileByPhone(trimmed)
+            if (phoneRes.isSuccess && phoneRes.getOrNull()?.found == true) {
+                return phoneRes
+            }
         }
+
+        // 4. Try loan target query
+        try {
+            val loanRes = getAgentLoanTarget(trimmed)
+            if (loanRes.isSuccess && loanRes.getOrNull()?.client != null) {
+                val c = loanRes.getOrNull()!!.client!!
+                return Result.success(com.example.data.model.PublicProfileResponse(
+                    success = true,
+                    found = true,
+                    profile = com.example.data.model.PublicProfileDto(
+                        walletId = c.walletId ?: trimmed,
+                        fullName = c.name ?: trimmed,
+                        role = "client",
+                        profilePhotoUrl = null,
+                        profilePhoto = null
+                    )
+                ))
+            }
+        } catch (_: Exception) {}
+
+        return Result.failure(Exception("Portefeuille ou utilisateur introuvable."))
     }
 
     suspend fun previewWithdrawal(
