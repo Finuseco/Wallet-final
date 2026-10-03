@@ -63,7 +63,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
 
         val prefs = getSharedPreferences("cashpay_preferences", Context.MODE_PRIVATE)
 
@@ -113,6 +116,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Lock session to PIN / Biometrics when app is put to background for bank-grade security
+        lifecycleScope.launch {
+            repository.lockSession()
         }
     }
 }

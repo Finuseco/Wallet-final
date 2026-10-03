@@ -159,6 +159,7 @@ fun AgentServicesDialog(
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
             topBar = {
                 // Modified Top Bar with overlapping commission balances
                 Box(modifier = Modifier.fillMaxWidth()) {

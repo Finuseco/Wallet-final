@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -133,24 +134,24 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // CashPay Brand Logo prominently and cleanly lowered & centered
+            // CashPay Brand Logo prominently centered near top
             Image(
                 painter = painterResource(id = R.drawable.cashpay_logo_white),
-                contentDescription = "CashPay Logo",
+                contentDescription = "CashPay All Logo",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .height(54.dp)
+                    .height(52.dp)
                     .testTag("cashpay_header_logo")
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Auth Method Selector Tab
             TabRow(

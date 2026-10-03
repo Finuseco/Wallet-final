@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "CashPay"
+rootProject.name = "CashPay All"
 
 include(":app")

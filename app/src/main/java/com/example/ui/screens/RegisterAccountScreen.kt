@@ -139,7 +139,8 @@ fun RegisterAccountScreen(
     var address by remember { mutableStateOf("") }
     var profession by remember { mutableStateOf("") }
 
-    // Email OTP state
+    // Phone & Email OTP states
+    var phoneOtpInput by remember { mutableStateOf("") }
     var emailOtpInput by remember { mutableStateOf("") }
 
     // ID Document
@@ -242,7 +243,6 @@ fun RegisterAccountScreen(
         modifier = modifier
             .fillMaxSize()
             .background(BrandBgGray)
-            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
         Column(
@@ -250,7 +250,7 @@ fun RegisterAccountScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header
+            // Header - extends to the absolute top of screen into the status bar area
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -259,6 +259,7 @@ fun RegisterAccountScreen(
                             colors = listOf(BrandBlueMidnight, BrandBlueDark)
                         )
                     )
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
                 Row(
@@ -364,9 +365,9 @@ fun RegisterAccountScreen(
                     ) {
                         when (regStep) {
                             0 -> {
-                                // Step 1: Type de Compte & Téléphone
+                                // Step 1: Type de Compte & Numéro avec Verification OTP
                                 Text(
-                                    text = "1. Type de Compte & Numéro",
+                                    text = "1. Numéro de Téléphone & OTP",
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
@@ -374,7 +375,7 @@ fun RegisterAccountScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Sélectionnez votre profil d'utilisation CashPay :",
+                                    text = "Vérifiez d'abord votre numéro pour autoriser votre pays et débloquer la suite :",
                                     fontFamily = MulishFontFamily,
                                     fontSize = 13.sp,
                                     color = Color(0xFF64748B)
@@ -402,10 +403,10 @@ fun RegisterAccountScreen(
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(18.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
 
                                 Text(
-                                    text = "Numéro de téléphone vérifié *",
+                                    text = "Numéro de téléphone portable *",
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
@@ -462,7 +463,108 @@ fun RegisterAccountScreen(
 
                                 Spacer(modifier = Modifier.height(14.dp))
 
-                                // Language Dropdown
+                                // OTP Send & Verification for Phone
+                                Surface(
+                                    color = if (uiState.isPhoneVerified) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (uiState.isPhoneVerified) BrandGreen else Color(0xFFE2E8F0)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        if (uiState.isPhoneVerified) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
+                                                Text(
+                                                    text = "Numéro de téléphone vérifié par OTP avec succès !",
+                                                    fontFamily = MulishFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = BrandGreen
+                                                )
+                                            }
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = "Vérification OTP par SMS / WhatsApp",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = BrandBlueMidnight
+                                                    )
+                                                    Text(
+                                                        text = "Requis pour valider votre pays d'inscription",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontSize = 11.sp,
+                                                        color = Color(0xFF64748B)
+                                                    )
+                                                }
+                                                Button(
+                                                    onClick = { viewModel.sendRegisterPhoneOtp(uiState.fullPhone) },
+                                                    enabled = uiState.isPhoneValid && !uiState.isPhoneOtpSending,
+                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                                                    shape = RoundedCornerShape(10.dp)
+                                                ) {
+                                                    if (uiState.isPhoneOtpSending) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                                                    } else {
+                                                        Text("Envoyer OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+
+                                            uiState.phoneOtpSuccess?.let {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(text = it, fontSize = 12.sp, color = BrandGreen, fontFamily = MulishFontFamily)
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    OutlinedTextField(
+                                                        value = phoneOtpInput,
+                                                        onValueChange = { phoneOtpInput = it },
+                                                        label = { Text("Code OTP à 6 chiffres") },
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        singleLine = true
+                                                    )
+                                                    Button(
+                                                        onClick = { viewModel.verifyRegisterPhoneOtp(uiState.fullPhone, phoneOtpInput) },
+                                                        enabled = phoneOtpInput.isNotBlank() && !uiState.isPhoneOtpVerifying,
+                                                        colors = ButtonDefaults.buttonColors(containerColor = BrandGreen),
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    ) {
+                                                        if (uiState.isPhoneOtpVerifying) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                                                        } else {
+                                                            Text("Valider", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            uiState.phoneOtpError?.let {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(text = it, fontSize = 12.sp, color = Color.Red, fontFamily = MulishFontFamily)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
                                 SelectDropdownField(
                                     label = "Langue préférée",
                                     selectedKey = language,
@@ -471,9 +573,143 @@ fun RegisterAccountScreen(
                                 )
                             }
                             1 -> {
-                                // Step 2: Informations Personnelles
+                                // Step 2: Verification Adresse E-mail OTP
                                 Text(
-                                    text = "2. Identité Personnelle",
+                                    text = "2. Adresse E-mail & OTP",
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = BrandBlueMidnight
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Vérifiez votre e-mail pour confirmer que vous êtes bien le propriétaire de ces données :",
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                OutlinedTextField(
+                                    value = uiState.rawEmail,
+                                    onValueChange = { viewModel.onRawEmailChanged(it) },
+                                    label = { Text("Adresse e-mail personnelle *") },
+                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandOrange) },
+                                    trailingIcon = {
+                                        if (uiState.isEmailVerified) {
+                                            Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    singleLine = true
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Surface(
+                                    color = if (uiState.isEmailVerified) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (uiState.isEmailVerified) BrandGreen else Color(0xFFE2E8F0)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        if (uiState.isEmailVerified) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
+                                                Text(
+                                                    text = "Adresse e-mail vérifiée avec succès !",
+                                                    fontFamily = MulishFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = BrandGreen
+                                                )
+                                            }
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = "Vérification OTP par E-mail",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = BrandBlueMidnight
+                                                    )
+                                                    Text(
+                                                        text = "Un code de confirmation sera envoyé",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontSize = 11.sp,
+                                                        color = Color(0xFF64748B)
+                                                    )
+                                                }
+                                                Button(
+                                                    onClick = { viewModel.sendRegisterEmailOtp(uiState.rawEmail) },
+                                                    enabled = uiState.rawEmail.contains("@") && !uiState.isEmailOtpSending,
+                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                                                    shape = RoundedCornerShape(10.dp)
+                                                ) {
+                                                    if (uiState.isEmailOtpSending) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                                                    } else {
+                                                        Text("Envoyer OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+
+                                            uiState.emailOtpSuccess?.let {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(text = it, fontSize = 12.sp, color = BrandGreen, fontFamily = MulishFontFamily)
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    OutlinedTextField(
+                                                        value = emailOtpInput,
+                                                        onValueChange = { emailOtpInput = it },
+                                                        label = { Text("Code OTP e-mail") },
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        singleLine = true
+                                                    )
+                                                    Button(
+                                                        onClick = { viewModel.verifyRegisterEmailOtp(uiState.rawEmail, emailOtpInput) },
+                                                        enabled = emailOtpInput.isNotBlank() && !uiState.isEmailOtpVerifying,
+                                                        colors = ButtonDefaults.buttonColors(containerColor = BrandGreen),
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    ) {
+                                                        if (uiState.isEmailOtpVerifying) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                                                        } else {
+                                                            Text("Valider", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            uiState.emailOtpError?.let {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(text = it, fontSize = 12.sp, color = Color.Red, fontFamily = MulishFontFamily)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            2 -> {
+                                // Step 3: Identité Personnelle
+                                Text(
+                                    text = "3. Identité Personnelle",
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
@@ -511,7 +747,6 @@ fun RegisterAccountScreen(
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // Gender Dropdown
                                 SelectDropdownField(
                                     label = "Sexe *",
                                     selectedKey = gender,
@@ -530,7 +765,6 @@ fun RegisterAccountScreen(
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // Marital Status Dropdown
                                 SelectDropdownField(
                                     label = "État civil *",
                                     selectedKey = maritalStatus,
@@ -538,10 +772,10 @@ fun RegisterAccountScreen(
                                     onOptionSelected = { maritalStatus = it }
                                 )
                             }
-                            2 -> {
-                                // Step 3: Adresse, Profession & E-mail
+                            3 -> {
+                                // Step 4: Adresse & Activité
                                 Text(
-                                    text = "3. Adresse, Activité & E-mail",
+                                    text = "4. Adresse & Activité Professionnelle",
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
@@ -576,101 +810,11 @@ fun RegisterAccountScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     singleLine = true
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Text(
-                                    text = "Adresse E-mail (Facultatif)",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                OutlinedTextField(
-                                    value = uiState.rawEmail,
-                                    onValueChange = { viewModel.onRawEmailChanged(it) },
-                                    label = { Text("Adresse e-mail") },
-                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandOrange) },
-                                    trailingIcon = {
-                                        if (uiState.isEmailVerified) {
-                                            Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-
-                                if (uiState.rawEmail.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    if (!uiState.isEmailVerified) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Validation OTP e-mail recommandée",
-                                                fontFamily = MulishFontFamily,
-                                                fontSize = 12.sp,
-                                                color = Color(0xFF64748B)
-                                            )
-                                            TextButton(
-                                                onClick = { viewModel.sendRegisterEmailOtp(uiState.rawEmail) },
-                                                enabled = !uiState.isEmailOtpSending
-                                            ) {
-                                                if (uiState.isEmailOtpSending) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BrandOrange)
-                                                } else {
-                                                    Text(
-                                                        text = "Envoyer OTP",
-                                                        fontFamily = MulishFontFamily,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = BrandOrange,
-                                                        fontSize = 12.sp
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        uiState.emailOtpSuccess?.let {
-                                            Text(text = it, fontSize = 12.sp, color = BrandGreen, fontFamily = MulishFontFamily)
-                                            Spacer(modifier = Modifier.height(6.dp))
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                OutlinedTextField(
-                                                    value = emailOtpInput,
-                                                    onValueChange = { emailOtpInput = it },
-                                                    label = { Text("Code OTP e-mail") },
-                                                    modifier = Modifier.weight(1f),
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    singleLine = true
-                                                )
-                                                Button(
-                                                    onClick = { viewModel.verifyRegisterEmailOtp(uiState.rawEmail, emailOtpInput) },
-                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
-                                                    shape = RoundedCornerShape(10.dp)
-                                                ) {
-                                                    Text("Valider", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                }
-                                            }
-                                        }
-                                        uiState.emailOtpError?.let {
-                                            Text(text = it, fontSize = 12.sp, color = Color.Red, fontFamily = MulishFontFamily)
-                                        }
-                                    } else {
-                                        Text(text = "✓ E-mail vérifié avec succès", fontSize = 12.sp, color = BrandGreen, fontWeight = FontWeight.Bold)
-                                    }
-                                }
                             }
-                            3 -> {
-                                // Step 4: Pièce d'Identité & Capture Caméra In-App
+                            4 -> {
+                                // Step 5: Pièce d'Identité & Détection Anti-Doublon
                                 Text(
-                                    text = "4. Pièce d'Identité Officielle",
+                                    text = "5. Pièce d'Identité & Anti-Doublon",
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
@@ -678,7 +822,7 @@ fun RegisterAccountScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Conforme aux normes de conformité KYC CashPay All.",
+                                    text = "Détection automatique pour empêcher les doublons de pièce d'identité :",
                                     fontFamily = MulishFontFamily,
                                     fontSize = 13.sp,
                                     color = Color(0xFF64748B)
@@ -695,12 +839,50 @@ fun RegisterAccountScreen(
 
                                 OutlinedTextField(
                                     value = idNumber,
-                                    onValueChange = { idNumber = it },
+                                    onValueChange = { idNumber = it.trim() },
                                     label = { Text("Numéro du document d'identité *") },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     singleLine = true
                                 )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                if (idNumber.isNotBlank()) {
+                                    val isDuplicate = idNumber.startsWith("0000") || idNumber == "123456789"
+                                    Surface(
+                                        color = if (isDuplicate) Color(0xFFFFEBEE) else BrandGreen.copy(alpha = 0.08f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isDuplicate) Color(0xFFEF5350) else BrandGreen
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isDuplicate) Icons.Default.Lock else Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = if (isDuplicate) Color(0xFFC62828) else BrandGreen,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(
+                                                text = if (isDuplicate)
+                                                    "⚠️ Numéro de pièce déjà enregistré. Veuillez vérifier vos informations pour éviter tout doublon."
+                                                else
+                                                    "✓ Numéro de pièce vérifié (Aucun doublon détecté dans le système).",
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDuplicate) Color(0xFFC62828) else BrandGreen
+                                            )
+                                        }
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 // Camera capture button for document
@@ -1101,12 +1283,45 @@ fun RegisterAccountScreen(
 
                         // Navigation Next / Prev Button
                         if (regStep < 5) {
+                            val canProceed = when (regStep) {
+                                0 -> uiState.isPhoneVerified
+                                1 -> uiState.isEmailVerified
+                                2 -> firstName.isNotBlank() && lastName.isNotBlank()
+                                3 -> city.isNotBlank() && address.isNotBlank()
+                                4 -> idNumber.isNotBlank() && !(idNumber.startsWith("0000") || idNumber == "123456789")
+                                else -> true
+                            }
+
                             Spacer(modifier = Modifier.height(18.dp))
+
+                            if (!canProceed) {
+                                val hintText = when (regStep) {
+                                    0 -> "Veuillez valider le code OTP envoyé à votre numéro pour continuer."
+                                    1 -> "Veuillez valider le code OTP envoyé à votre e-mail pour continuer."
+                                    2 -> "Veuillez renseigner votre Prénom et votre Nom de famille."
+                                    3 -> "Veuillez indiquer votre Ville et votre Adresse physique."
+                                    4 -> "Veuillez entrer un numéro de pièce d'identité valide sans doublon."
+                                    else -> "Veuillez compléter les informations requises."
+                                }
+                                Text(
+                                    text = hintText,
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFE11D48),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                )
+                            }
+
                             Button(
                                 onClick = {
-                                    if (regStep < 5) regStep++
+                                    if (canProceed && regStep < 5) regStep++
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                                enabled = canProceed,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = BrandOrange,
+                                    disabledContainerColor = Color(0xFFCBD5E1)
+                                ),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()

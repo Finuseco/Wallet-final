@@ -1,8 +1,8 @@
 package com.example.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -10,17 +10,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Backspace
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.ui.theme.ToofanBodyText
 import com.example.ui.theme.ToofanGreen
 import com.example.ui.theme.ToofanMainDark
 import com.example.ui.theme.ToofanWhite
@@ -58,14 +53,14 @@ fun CustomKeypad(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         rows.forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 row.forEach { digit ->
                     ToofanKeypadKey(
@@ -77,30 +72,28 @@ fun CustomKeypad(
             }
         }
 
-        // Bottom row: Biometric / 0 / Backspace
+        // Bottom row: Biometric (large prominent button) / 0 / Backspace
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Left Action Key (Biometric or Empty)
+            // Left Action Key: Biometric / Fingerprint (Large and clear)
             if (onBiometricClick != null) {
                 ToofanKeypadIconKey(
                     icon = {
                         Image(
                             painter = painterResource(id = R.drawable.toofan_fingerprint),
                             contentDescription = "Empreinte biométrique",
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(38.dp)
                         )
                     },
+                    backgroundColor = Color(0xFFE8F7F0),
+                    border = BorderStroke(1.5.dp, ToofanGreen.copy(alpha = 0.6f)),
                     onClick = onBiometricClick,
                     testTag = "keypad_biometric_button"
                 )
             } else {
-                Box(
-                    modifier = Modifier
-                        .width(88.dp)
-                        .height(68.dp)
-                )
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             // Zero
@@ -110,15 +103,17 @@ fun CustomKeypad(
                 testTag = "keypad_digit_0"
             )
 
-            // Right Action Key (Backspace)
+            // Right Action Key: Backspace
             ToofanKeypadIconKey(
                 icon = {
                     Image(
                         painter = painterResource(id = R.drawable.toofan_backspace),
                         contentDescription = "Effacer",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 },
+                backgroundColor = ToofanWhite,
+                border = null,
                 onClick = onBackspaceClick,
                 testTag = "keypad_backspace_button"
             )
@@ -127,7 +122,7 @@ fun CustomKeypad(
 }
 
 @Composable
-private fun ToofanKeypadKey(
+private fun RowScope.ToofanKeypadKey(
     text: String,
     onClick: () -> Unit,
     testTag: String
@@ -138,19 +133,19 @@ private fun ToofanKeypadKey(
 
     Surface(
         modifier = Modifier
-            .width(88.dp)
-            .height(68.dp)
+            .weight(1f)
+            .height(70.dp)
             .scale(scale)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material3.ripple(bounded = true),
                 onClick = onClick
             )
             .testTag(testTag),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         color = ToofanWhite,
-        shadowElevation = 1.dp
+        shadowElevation = 2.dp
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -158,7 +153,7 @@ private fun ToofanKeypadKey(
         ) {
             Text(
                 text = text,
-                fontSize = 24.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = ToofanMainDark
             )
@@ -167,8 +162,10 @@ private fun ToofanKeypadKey(
 }
 
 @Composable
-private fun ToofanKeypadIconKey(
+private fun RowScope.ToofanKeypadIconKey(
     icon: @Composable () -> Unit,
+    backgroundColor: Color,
+    border: BorderStroke?,
     onClick: () -> Unit,
     testTag: String
 ) {
@@ -178,19 +175,20 @@ private fun ToofanKeypadIconKey(
 
     Surface(
         modifier = Modifier
-            .width(88.dp)
-            .height(68.dp)
+            .weight(1f)
+            .height(70.dp)
             .scale(scale)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material3.ripple(bounded = true),
                 onClick = onClick
             )
             .testTag(testTag),
-        shape = RoundedCornerShape(12.dp),
-        color = ToofanWhite,
-        shadowElevation = 1.dp
+        shape = RoundedCornerShape(16.dp),
+        color = backgroundColor,
+        border = border,
+        shadowElevation = 2.dp
     ) {
         Box(
             contentAlignment = Alignment.Center,

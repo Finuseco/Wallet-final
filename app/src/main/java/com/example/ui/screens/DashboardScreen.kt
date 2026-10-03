@@ -1002,7 +1002,8 @@ fun CashPayTopHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(height)
+            .heightIn(min = height)
+            .wrapContentHeight()
             .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
             .background(
                 Brush.verticalGradient(
@@ -1070,20 +1071,43 @@ fun CashPayTopHeader(
                             .border(1.5.dp, Color(0xFF00E5FF), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (userProfile?.profilePhotoUrl != null) {
+                        if (!userProfile?.profilePhotoUrl.isNullOrBlank()) {
                             AsyncImage(
-                                model = userProfile.profilePhotoUrl,
+                                model = userProfile?.profilePhotoUrl,
                                 contentDescription = "Avatar",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().clip(CircleShape)
                             )
                         } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.avatar_patrick),
-                                contentDescription = "Avatar",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().clip(CircleShape)
-                            )
+                            val initials = (userProfile?.fullName ?: "CP")
+                                .trim()
+                                .split(" ")
+                                .mapNotNull { it.firstOrNull()?.toString() }
+                                .take(2)
+                                .joinToString("")
+                                .uppercase()
+                                .ifBlank { "CP" }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(0xFF000E38),
+                                                Color(0xFF00E5FF)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = initials,
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
 
@@ -3105,20 +3129,43 @@ private fun ToofanProfileTab(
                             .border(2.dp, ToofanGreen, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (userProfile?.profilePhotoUrl != null) {
+                        if (!userProfile?.profilePhotoUrl.isNullOrBlank()) {
                             AsyncImage(
-                                model = userProfile.profilePhotoUrl,
+                                model = userProfile?.profilePhotoUrl,
                                 contentDescription = "Avatar",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().clip(CircleShape)
                             )
                         } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.avatar_patrick),
-                                contentDescription = "Avatar",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().clip(CircleShape)
-                            )
+                            val initials = (userProfile?.fullName ?: "CP")
+                                .trim()
+                                .split(" ")
+                                .mapNotNull { it.firstOrNull()?.toString() }
+                                .take(2)
+                                .joinToString("")
+                                .uppercase()
+                                .ifBlank { "CP" }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(0xFF000E38),
+                                                Color(0xFF00E5FF)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = initials,
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
 
@@ -4047,7 +4094,7 @@ fun CashPayCardComponent(
                             color = Color.White.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = "Patrick L.",
+                            text = "TITULAIRE DU COMPTE",
                             fontFamily = MulishFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
@@ -4862,73 +4909,38 @@ private fun RecentCorrespondentItem(
             ) {
                 val rawPhoto = contact.publicProfile?.profilePhotoUrl ?: contact.publicProfile?.profilePhoto
                 val resolved = resolveAvatarUrl(rawPhoto)
-                when {
-                    resolved is String && resolved.startsWith("drawable:") -> {
-                        val res = when (resolved) {
-                            "drawable:avatar_jean" -> R.drawable.avatar_jean
-                            "drawable:avatar_marie" -> R.drawable.avatar_marie
-                            "drawable:avatar_koffi" -> R.drawable.avatar_koffi
-                            else -> R.drawable.avatar_jean
-                        }
-                        Image(
-                            painter = painterResource(id = res),
-                            contentDescription = contact.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                if (resolved != null && !resolved.toString().startsWith("drawable:")) {
+                    AsyncImage(
+                        model = resolved,
+                        contentDescription = contact.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    val initials = contact.name.trim().split(" ")
+                        .mapNotNull { it.firstOrNull()?.toString() }
+                        .take(2).joinToString("").uppercase()
+                        .ifBlank { "CP" }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0xFF000E38),
+                                        Color(0xFF00E5FF)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = initials,
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color.White
                         )
-                    }
-                    resolved != null -> {
-                        AsyncImage(
-                            model = resolved,
-                            contentDescription = contact.name,
-                            placeholder = painterResource(id = R.drawable.avatar_jean),
-                            error = painterResource(id = R.drawable.avatar_jean),
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                        )
-                    }
-                    contact.name.contains("Jean", ignoreCase = true) -> {
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar_jean),
-                            contentDescription = contact.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                        )
-                    }
-                    contact.name.contains("Marie", ignoreCase = true) -> {
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar_marie),
-                            contentDescription = contact.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                        )
-                    }
-                    contact.name.contains("Koffi", ignoreCase = true) -> {
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar_koffi),
-                            contentDescription = contact.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                        )
-                    }
-                    else -> {
-                        val initials = contact.name.trim().split(" ")
-                            .mapNotNull { it.firstOrNull()?.toString() }
-                            .take(2).joinToString("").uppercase()
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Brush.linearGradient(listOf(ringColor.copy(alpha = 0.85f), ringColor))),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (initials.isNotBlank()) initials else "CP",
-                                fontFamily = MulishFontFamily,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
-                                color = Color.White
-                            )
-                        }
                     }
                 }
             }
@@ -6301,28 +6313,65 @@ private fun ActionPlusTile(
 private fun readAndSyncPhoneContacts(context: Context, dashboardViewModel: DashboardViewModel) {
     try {
         val resolver = context.contentResolver
-        val cursor = resolver.query(
-            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            arrayOf(
-                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                ContactsContract.CommonDataKinds.Phone.NUMBER
-            ),
-            null,
-            null,
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+        // Map to store phone -> name, deduplicating by normalized digit key
+        val contactsMap = mutableMapOf<String, String>()
+
+        // 1. Primary Android query across all accounts (Gmail / Google account, device phone storage, WhatsApp, etc.)
+        val phoneProjection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER
         )
-        val rawList = mutableListOf<Pair<String, String>>()
-        cursor?.use {
-            val nameIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-            val numIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-            while (it.moveToNext()) {
-                val name = if (nameIdx != -1) it.getString(nameIdx) ?: "Contact" else "Contact"
-                val num = if (numIdx != -1) it.getString(numIdx) ?: "" else ""
-                if (num.isNotBlank() && rawList.none { pair -> pair.second == num }) {
-                    rawList.add(name to num)
+        try {
+            resolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                phoneProjection,
+                null,
+                null,
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
+            )?.use { cursor ->
+                val nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val normIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NORMALIZED_NUMBER)
+                while (cursor.moveToNext()) {
+                    val name = if (nameIdx != -1) cursor.getString(nameIdx) ?: "Contact" else "Contact"
+                    val num = if (numIdx != -1) cursor.getString(numIdx) ?: "" else ""
+                    val norm = if (normIdx != -1) cursor.getString(normIdx) else null
+                    val cleanDigits = (norm ?: num).replace(Regex("[^0-9+]"), "").trim()
+                    if (cleanDigits.length >= 4) {
+                        if (!contactsMap.containsKey(cleanDigits) || contactsMap[cleanDigits].isNullOrBlank() || contactsMap[cleanDigits] == "Contact") {
+                            contactsMap[cleanDigits] = name
+                        }
+                    }
                 }
             }
+        } catch (_: Exception) {}
+
+        // 2. Query SIM card ADN directly for any SIM-only contacts that might not be synced to main database
+        val simUris = listOf("content://icc/adn", "content://sim/adn", "content://icc/adn/subId/1", "content://icc/adn/subId/2")
+        for (simUriStr in simUris) {
+            try {
+                val simUri = android.net.Uri.parse(simUriStr)
+                resolver.query(simUri, null, null, null, null)?.use { simCursor ->
+                    val nameIdx = simCursor.getColumnIndex("name").takeIf { it != -1 }
+                        ?: simCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                    val numIdx = simCursor.getColumnIndex("number").takeIf { it != -1 }
+                        ?: simCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    while (simCursor.moveToNext()) {
+                        val name = if (nameIdx != -1) simCursor.getString(nameIdx) ?: "Contact SIM" else "Contact SIM"
+                        val num = if (numIdx != -1) simCursor.getString(numIdx) ?: "" else ""
+                        val cleanDigits = num.replace(Regex("[^0-9+]"), "").trim()
+                        if (cleanDigits.length >= 4) {
+                            if (!contactsMap.containsKey(cleanDigits)) {
+                                contactsMap[cleanDigits] = name
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
+
+        val rawList = contactsMap.map { (phone, name) -> name to phone }
         dashboardViewModel.syncContacts(rawList)
     } catch (e: Exception) {
         // Handled gracefully

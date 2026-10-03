@@ -1192,57 +1192,76 @@ class DashboardViewModel(
         // Supprimé complètement les contacts fictifs pour n'afficher que les réels recherchés.
     }
 
-    // Lookup on RAW phone contacts
+    // Lookup on RAW phone contacts (Gmail, Phone, SIM)
     fun syncContacts(rawContacts: List<Pair<String, String>>) {
         if (rawContacts.isEmpty()) return
         _uiState.update { it.copy(isLoadingContacts = true, contactsError = null) }
 
         viewModelScope.launch {
             try {
-                // Optimization: use a larger batch but limit total to reasonable number for UI
-                val contactsToSync = rawContacts.take(200) 
-                
-                val resolvedList = kotlinx.coroutines.coroutineScope {
-                    contactsToSync.map { (name, rawPhone) ->
-                        async {
-                            // Normalize phone
-                            val cleaned = rawPhone.replace(Regex("[^0-9+]"), "")
-                            var normalized = cleaned
-                            if (cleaned.startsWith("0")) {
-                                normalized = "243" + cleaned.substring(1)
-                            } else if (!cleaned.startsWith("+") && !cleaned.startsWith("243") && cleaned.length == 9) {
-                                normalized = "243" + cleaned
-                            }
-                            normalized = normalized.replace("+", "")
+                // Map ALL contacts from SIM, Gmail, and Phone storage so none are lost
+                val allContacts = rawContacts.map { (name, rawPhone) ->
+                    val cleaned = rawPhone.replace(Regex("[^0-9+]"), "")
+                    var normalized = cleaned
+                    if (cleaned.startsWith("0")) {
+                        normalized = "243" + cleaned.substring(1)
+                    } else if (!cleaned.startsWith("+") && !cleaned.startsWith("243") && cleaned.length == 9) {
+                        normalized = "243" + cleaned
+                    }
+                    normalized = normalized.replace("+", "")
 
-                            // Concurrent lookup
-                            val searchResult = repository.searchProfileByPhone(normalized)
-                            var phoneContact = com.example.data.model.PhoneContact(
-                                name = name,
-                                phone = rawPhone,
-                                normalizedPhone = normalized,
-                                isCashPayUser = false,
-                                publicProfile = null
-                            )
-
-                            searchResult.onSuccess { resp ->
-                                if (resp.success && resp.found && resp.profile != null) {
-                                    phoneContact = phoneContact.copy(
-                                        isCashPayUser = true,
-                                        publicProfile = resp.profile
-                                    )
-                                }
-                            }
-                            phoneContact
-                        }
-                    }.awaitAll()
+                    com.example.data.model.PhoneContact(
+                        name = name,
+                        phone = rawPhone,
+                        normalizedPhone = normalized,
+                        isCashPayUser = false,
+                        publicProfile = null
+                    )
                 }
-                
+
+                // Immediately display all device & Gmail & SIM contacts in UI
                 _uiState.update {
                     it.copy(
                         isLoadingContacts = false,
-                        contactsList = resolvedList.sortedByDescending { it.isCashPayUser }
+                        contactsList = allContacts
                     )
+                }
+
+                // Concurrently resolve CashPay network status for top contacts without blocking display
+                val lookupBatch = allContacts.take(80)
+                val resolvedMap = kotlinx.coroutines.coroutineScope {
+                    lookupBatch.map { contact ->
+                        async {
+                            try {
+                                val searchResult = repository.searchProfileByPhone(contact.normalizedPhone)
+                                val profile = searchResult.getOrNull()
+                                if (profile != null && profile.success && profile.found && profile.profile != null) {
+                                    contact.normalizedPhone to profile.profile
+                                } else null
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    }.awaitAll().filterNotNull().toMap()
+                }
+
+                if (resolvedMap.isNotEmpty()) {
+                    val updatedList = allContacts.map { contact ->
+                        val matched = resolvedMap[contact.normalizedPhone]
+                        if (matched != null) {
+                            contact.copy(isCashPayUser = true, publicProfile = matched)
+                        } else {
+                            contact
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            contactsList = updatedList.sortedWith(
+                                compareByDescending<com.example.data.model.PhoneContact> { c -> c.isCashPayUser }
+                                    .thenBy { c -> c.name.lowercase() }
+                            )
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update {

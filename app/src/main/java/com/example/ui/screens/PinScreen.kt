@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -130,9 +131,9 @@ fun PinScreen(
                                 .border(2.dp, ToofanGreen, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (uiState.installedUserProfile?.profilePhotoUrl != null) {
+                            if (!uiState.installedUserProfile?.profilePhotoUrl.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = uiState.installedUserProfile.profilePhotoUrl,
+                                    model = uiState.installedUserProfile?.profilePhotoUrl,
                                     contentDescription = "Avatar",
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
@@ -140,25 +141,49 @@ fun PinScreen(
                                         .clip(CircleShape)
                                 )
                             } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.avatar_patrick),
-                                    contentDescription = "Avatar",
-                                    contentScale = ContentScale.Crop,
+                                val initials = (uiState.installedUserProfile?.fullName ?: uiState.rawPhone)
+                                    .trim()
+                                    .split(" ")
+                                    .mapNotNull { it.firstOrNull()?.toString() }
+                                    .take(2)
+                                    .joinToString("")
+                                    .uppercase()
+                                    .ifBlank { "CP" }
+                                Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .clip(CircleShape)
-                                )
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    Color(0xFF000E38),
+                                                    Color(0xFF00E5FF)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = initials,
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 24.sp,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
+
+                        val displayName = uiState.installedUserProfile?.fullName
+                            ?: (if (uiState.rawPhone.isNotBlank()) uiState.rawPhone else "Mon Compte")
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = uiState.installedUserProfile?.fullName ?: "Patrick Lubanda",
+                                text = displayName,
                                 fontFamily = MulishFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,

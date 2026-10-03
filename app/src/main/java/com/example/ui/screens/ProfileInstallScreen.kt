@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -83,17 +84,19 @@ fun ProfileInstallScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .statusBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             // CashPay Brand Logo at the top header
             Image(
                 painter = painterResource(id = R.drawable.cashpay_logo),
-                contentDescription = "CashPay",
+                contentDescription = "CashPay All",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .height(36.dp)
+                    .height(38.dp)
                     .padding(bottom = 16.dp)
             )
 
@@ -106,9 +109,9 @@ fun ProfileInstallScreen(
                     .border(2.5.dp, ToofanGreen, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (uiState.installedUserProfile?.profilePhotoUrl != null) {
+                if (!uiState.installedUserProfile?.profilePhotoUrl.isNullOrBlank()) {
                     AsyncImage(
-                        model = uiState.installedUserProfile.profilePhotoUrl,
+                        model = uiState.installedUserProfile?.profilePhotoUrl,
                         contentDescription = "Avatar",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -116,18 +119,42 @@ fun ProfileInstallScreen(
                             .clip(CircleShape)
                     )
                 } else {
-                    Image(
-                        painter = painterResource(id = R.drawable.avatar_patrick),
-                        contentDescription = "Avatar",
-                        contentScale = ContentScale.Crop,
+                    val initials = (uiState.installedUserProfile?.fullName ?: uiState.rawPhone)
+                        .trim()
+                        .split(" ")
+                        .mapNotNull { it.firstOrNull()?.toString() }
+                        .take(2)
+                        .joinToString("")
+                        .uppercase()
+                        .ifBlank { "CP" }
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(CircleShape)
-                    )
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(0xFF000E38),
+                                        Color(0xFF00E5FF)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = initials,
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 32.sp,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+
+            val displayName = uiState.installedUserProfile?.fullName
+                ?: (if (uiState.rawPhone.isNotBlank()) uiState.rawPhone else "Installation du compte")
 
             // User Identity & Greeting with blue certified badge when profile ready
             Row(
@@ -135,7 +162,7 @@ fun ProfileInstallScreen(
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = uiState.installedUserProfile?.fullName ?: "Patrick Lubanda",
+                    text = displayName,
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 22.sp,

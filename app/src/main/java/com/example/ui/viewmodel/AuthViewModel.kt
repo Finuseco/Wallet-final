@@ -62,6 +62,13 @@ data class AuthUiState(
     val registrationSuccessPhone: String? = null,
     val registrationSuccessToken: String? = null,
 
+    // Phone OTP verification state for Registration
+    val isPhoneOtpSending: Boolean = false,
+    val isPhoneOtpVerifying: Boolean = false,
+    val isPhoneVerified: Boolean = false,
+    val phoneOtpError: String? = null,
+    val phoneOtpSuccess: String? = null,
+
     // Email OTP verification state
     val isEmailOtpSending: Boolean = false,
     val isEmailOtpVerifying: Boolean = false,
@@ -147,6 +154,23 @@ class AuthViewModel(
     val currentUserProfile: StateFlow<UserProfileEntity?> = repository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    private fun mapEntityToDto(e: com.example.data.local.UserProfileEntity): UserProfileDto {
+        return UserProfileDto(
+            id = e.id,
+            role = e.role,
+            status = e.status,
+            accountType = e.accountType,
+            walletId = e.walletId,
+            language = e.language,
+            fullName = e.fullName,
+            firstName = e.firstName,
+            lastName = e.lastName,
+            email = e.email,
+            phone = e.phone,
+            profilePhotoUrl = e.profilePhotoUrl
+        )
+    }
+
     init {
         loadCountries()
         viewModelScope.launch {
@@ -157,25 +181,59 @@ class AuthViewModel(
             }
         }
         viewModelScope.launch {
+            repository.userProfile.collect { profile ->
+                if (profile != null) {
+                    val dto = mapEntityToDto(profile)
+                    _uiState.update { current ->
+                        current.copy(
+                            installedUserProfile = dto,
+                            rawPhone = profile.phone ?: current.rawPhone,
+                            walletId = profile.walletId ?: current.walletId
+                        )
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
             repository.session.collect { session ->
-                if (session != null && !session.sessionToken.isNullOrBlank()) {
-                    com.example.data.remote.ApiClient.sessionToken = session.sessionToken
-                    _uiState.update {
-                        it.copy(
+                if (session != null) {
+                    if (!session.sessionToken.isNullOrBlank()) {
+                        com.example.data.remote.ApiClient.sessionToken = session.sessionToken
+                    }
+                    val currentProfile = repository.getUserProfileOnce()
+                    val dto = currentProfile?.let { mapEntityToDto(it) }
+                    _uiState.update { current ->
+                        current.copy(
                             userId = session.userId,
-                            walletId = session.walletId ?: it.walletId,
-                            rawPhone = session.phone ?: it.rawPhone,
+                            walletId = session.walletId ?: currentProfile?.walletId ?: current.walletId,
+                            rawPhone = session.phone ?: currentProfile?.phone ?: current.rawPhone,
+                            installedUserProfile = dto ?: current.installedUserProfile,
+                            // When user has an established account, lock to PIN/fingerprint! Never ask OTP again.
                             authStep = if (session.isAuthenticated) AuthStep.COMPLETED else AuthStep.PIN_ENTRY
                         )
                     }
-                } else if (session == null) {
-                    com.example.data.remote.ApiClient.sessionToken = null
-                    _uiState.update {
-                        AuthUiState(
-                            countries = it.countries,
-                            selectedCountry = it.selectedCountry,
-                            authStep = AuthStep.IDENTIFICATION
-                        )
+                } else {
+                    val profile = repository.getUserProfileOnce()
+                    if (profile != null) {
+                        val dto = mapEntityToDto(profile)
+                        _uiState.update { current ->
+                            current.copy(
+                                userId = profile.id,
+                                walletId = profile.walletId ?: current.walletId,
+                                rawPhone = profile.phone ?: current.rawPhone,
+                                installedUserProfile = dto,
+                                authStep = AuthStep.PIN_ENTRY
+                            )
+                        }
+                    } else {
+                        com.example.data.remote.ApiClient.sessionToken = null
+                        _uiState.update {
+                            AuthUiState(
+                                countries = it.countries,
+                                selectedCountry = it.selectedCountry,
+                                authStep = AuthStep.IDENTIFICATION
+                            )
+                        }
                     }
                 }
             }
@@ -496,6 +554,55 @@ class AuthViewModel(
                 pinCode = "",
                 otpCode = ""
             )
+        }
+    }
+
+    fun sendRegisterPhoneOtp(phone: String) {
+        if (phone.isBlank()) return
+        _uiState.update { it.copy(isPhoneOtpSending = true, phoneOtpError = null, phoneOtpSuccess = null) }
+        viewModelScope.launch {
+            val res = repository.registerSendPhoneOtp(phone.trim())
+            res.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isPhoneOtpSending = false,
+                        phoneOtpSuccess = resp.message ?: "Code OTP SMS envoyé avec succès.",
+                        phoneOtpError = null
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isPhoneOtpSending = false,
+                        phoneOtpError = err.message ?: "Échec d'envoi du code OTP au numéro de téléphone."
+                    )
+                }
+            }
+        }
+    }
+
+    fun verifyRegisterPhoneOtp(phone: String, otp: String) {
+        if (phone.isBlank() || otp.isBlank()) return
+        _uiState.update { it.copy(isPhoneOtpVerifying = true, phoneOtpError = null) }
+        viewModelScope.launch {
+            val res = repository.registerVerifyPhoneOtp(phone.trim(), otp.trim())
+            res.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isPhoneOtpVerifying = false,
+                        isPhoneVerified = true,
+                        phoneOtpSuccess = "Numéro de téléphone vérifié avec succès !",
+                        phoneOtpError = null
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isPhoneOtpVerifying = false,
+                        phoneOtpError = err.message ?: "Code OTP téléphone invalide."
+                    )
+                }
+            }
         }
     }
 

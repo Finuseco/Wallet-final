@@ -38,24 +38,45 @@ class CashPayRepository(
     private val dao: CashPayDao
 ) {
 
-    private fun extractErrorMessage(errorBody: String?, fallback: String): String {
-        if (errorBody.isNullOrBlank()) return fallback
-        val trimmed = errorBody.trim()
-        if (trimmed.startsWith("<") || trimmed.contains("<!DOCTYPE", ignoreCase = true) || trimmed.contains("<html", ignoreCase = true) || trimmed.contains("<body", ignoreCase = true) || trimmed.contains("Internal Server Error", ignoreCase = true)) {
+    private fun sanitizeUserError(rawMsg: String?, fallback: String): String {
+        if (rawMsg.isNullOrBlank()) return fallback
+        val clean = rawMsg.trim()
+        if (clean.contains("<") || clean.contains("<!DOCTYPE", ignoreCase = true) ||
+            clean.contains("cashpay", ignoreCase = true) || clean.contains("http://", ignoreCase = true) ||
+            clean.contains("https://", ignoreCase = true) || clean.contains("api/", ignoreCase = true) ||
+            clean.contains("Internal Server Error", ignoreCase = true) || clean.contains("Exception", ignoreCase = true) ||
+            clean.contains("SocketTimeout", ignoreCase = true) || clean.contains("Unable to resolve host", ignoreCase = true) ||
+            clean.contains("connection reset", ignoreCase = true) || clean.contains("Failed to connect", ignoreCase = true) ||
+            clean.contains("host", ignoreCase = true) || clean.length > 120
+        ) {
             return fallback
         }
+        return clean
+    }
+
+    private fun extractErrorMessage(errorBody: String?, fallback: String): String {
+        if (errorBody.isNullOrBlank()) return fallback
         return try {
             val json = JSONObject(errorBody)
             val err = json.optString("error", "")
             val rawMsg = if (err.isNotBlank()) err else json.optString("message", fallback)
-            if (rawMsg.contains("<") || rawMsg.length > 120) fallback else rawMsg
+            sanitizeUserError(rawMsg, fallback)
         } catch (_: Exception) {
-            if (trimmed.length > 80 || trimmed.contains("<")) fallback else trimmed
+            sanitizeUserError(errorBody, fallback)
         }
     }
 
     val userProfile: Flow<UserProfileEntity?> = dao.getUserProfile()
     val session: Flow<SessionEntity?> = dao.getSession()
+
+    suspend fun getUserProfileOnce(): UserProfileEntity? = dao.getUserProfileOnce()
+
+    suspend fun lockSession() {
+        val current = dao.getSessionOnce()
+        if (current != null && current.isAuthenticated) {
+            dao.saveSession(current.copy(isAuthenticated = false))
+        }
+    }
     val transactions: Flow<List<TransactionEntity>> = dao.getTransactions()
     val notifications: Flow<List<NotificationEntity>> = dao.getNotifications()
     val countries: Flow<List<CountryDto>> = dao.getAllCountries().map { list ->
@@ -237,6 +258,14 @@ class CashPayRepository(
         return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
     }
 
+    suspend fun registerSendPhoneOtp(phone: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "send_phone_otp", phone = phone))
+    }
+
+    suspend fun registerVerifyPhoneOtp(phone: String, otp: String): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "verify_phone_otp", phone = phone, otp = otp))
+    }
+
     suspend fun registerSendEmailOtp(email: String): Result<RegisterResponse> {
         return register(RegisterRequest(action = "send_email_otp", email = email))
     }
@@ -341,13 +370,16 @@ class CashPayRepository(
                     dao.insertUserProfile(entity)
 
                     // Profile installed: session is prepared, but NOT authenticated until PIN verification!
+                    val existing = dao.getSessionOnce()
+                    val token = existing?.sessionToken ?: "token_${p.id}"
                     val session = SessionEntity(
                         id = 1,
                         userId = p.id,
                         walletId = p.walletId,
                         phone = p.phone,
                         isAuthenticated = false,
-                        biometricEnabled = true
+                        biometricEnabled = true,
+                        sessionToken = token
                     )
                     dao.saveSession(session)
                 }
