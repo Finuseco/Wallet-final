@@ -1262,4 +1262,18 @@ class CashPayRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun withdrawAction(request: com.example.data.model.WithdrawActionRequest): Result<com.example.data.model.WithdrawActionResponse> {
+        return try {
+            val response = apiService.withdrawAction(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors de l'opération de retrait")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

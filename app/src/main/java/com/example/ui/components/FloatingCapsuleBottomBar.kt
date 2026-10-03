@@ -43,7 +43,7 @@ fun FloatingCapsuleBottomBar(
     onCentralActionClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+        Surface(
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         color = Color.White,
         shadowElevation = 8.dp,
@@ -55,7 +55,7 @@ fun FloatingCapsuleBottomBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
+                .padding(bottom = 8.dp) // Manual padding instead of navigationBarsPadding to avoid hiding
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {

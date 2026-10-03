@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +34,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Sms
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
@@ -102,6 +106,7 @@ fun AgentServicesDialog(
     onOpenQrScanner: () -> Unit,
     onTabSelected: (Int) -> Unit,
     onToggleAgentBalanceVisibility: () -> Unit,
+    onCentralActionClick: () -> Unit,
     // Bascule Commission
     onOpenSweepDialog: (String) -> Unit,
     onCloseSweepDialog: () -> Unit,
@@ -155,124 +160,28 @@ fun AgentServicesDialog(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                CashPayTopHeader(
-                    userProfile = userProfile,
-                    unreadNotifCount = 0,
-                    onNotificationClick = { /* no-op */ },
-                    onSettingsClick = { /* no-op */ },
-                    height = 200.dp,
-                    onBackClick = onDismiss
-                )
-            },
-            bottomBar = {
-                FloatingCapsuleBottomBar(
-                    selectedTab = 0,
-                    onTabSelected = { tab ->
-                        onDismiss()
-                        onTabSelected(tab)
-                    },
-                    onCentralActionClick = onDismiss
-                )
-            }
-        ) { paddingValues ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .background(Color(0xFFF8F9FD)),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Agent Profile Banner
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 6.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        shadowElevation = 0.5.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .background(Color(0xFF10B981).copy(alpha = 0.15f), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SupportAgent,
-                                        contentDescription = null,
-                                        tint = Color(0xFF047857),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Espace Agent CashPay Agréé",
-                                            fontFamily = MulishFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF0F172A)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.Verified,
-                                            contentDescription = "Agréé",
-                                            tint = Color(0xFF00C48C),
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                    Text(
-                                        text = "ID Wallet : ${userProfile?.walletId ?: "Agent Actif"}",
-                                        fontFamily = MulishFontFamily,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF64748B)
-                                    )
-                                }
-                            }
+                // Modified Top Bar with overlapping commission balances
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    CashPayTopHeader(
+                        userProfile = userProfile,
+                        unreadNotifCount = 0,
+                        onNotificationClick = { /* no-op */ },
+                        onSettingsClick = { /* no-op */ },
+                        height = 200.dp,
+                        onBackClick = null 
+                    )
 
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFECFDF5)
-                            ) {
-                                Text(
-                                    text = "AGENT ACTIF",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
-                                    color = Color(0xFF047857),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Commission Cards Section (Clean Container)
-                item {
+                    // Agent Commission Balances overlapping the header
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp)
+                            .padding(top = 115.dp)
                     ) {
-                        Text(
-                            text = "Vos Soldes Commissions",
-                            fontFamily = MulishFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = Color(0xFF0F172A),
-                            modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 10.dp)
-                        )
+                        val commMap = if (uiState.agentCommissionsMap.isNotEmpty()) {
+                            uiState.agentCommissionsMap
+                        } else {
+                            mapOf("USD" to uiState.agentCommissionUsd, "CDF" to uiState.agentCommissionCdf)
+                        }
 
                         Row(
                             modifier = Modifier
@@ -281,11 +190,6 @@ fun AgentServicesDialog(
                                 .padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            val commMap = if (uiState.agentCommissionsMap.isNotEmpty()) {
-                                uiState.agentCommissionsMap
-                            } else {
-                                mapOf("USD" to uiState.agentCommissionUsd, "CDF" to uiState.agentCommissionCdf)
-                            }
                             val colors = listOf(Color(0xFF0F172A), Color(0xFF312E81), Color(0xFF1E3A8A), Color(0xFF065F46))
                             var cIdx = 0
                             commMap.forEach { (curr, amt) ->
@@ -301,48 +205,34 @@ fun AgentServicesDialog(
                         }
                     }
                 }
-
-                // Info Note
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFF1F5F9),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SwapHoriz,
-                                contentDescription = null,
-                                tint = Color(0xFF64748B),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Basculez vos commissions vers votre compte principal instantanément.",
-                                fontFamily = MulishFontFamily,
-                                fontSize = 11.sp,
-                                color = Color(0xFF475569),
-                                lineHeight = 14.sp
-                            )
-                        }
-                    }
-                }
-
-                // Section Action Shortcuts (Services Concernés) - Identical to Dashboard Buttons
+            },
+            bottomBar = {
+                FloatingCapsuleBottomBar(
+                    selectedTab = 0,
+                    onTabSelected = { tab ->
+                        onDismiss()
+                        onTabSelected(tab)
+                    },
+                    onCentralActionClick = onCentralActionClick
+                )
+            }
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .background(Color(0xFFF8F9FD)),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Section Action Shortcuts (Services Concernés) - Reorganized grid
                 item {
                     Text(
-                        text = "Services Opérationnels Agent",
+                        text = "Tableau de Bord Agent",
                         fontFamily = MulishFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
                         color = Color(0xFF0F172A),
-                        modifier = Modifier.padding(horizontal = 20.dp).padding(top = 4.dp)
+                        modifier = Modifier.padding(horizontal = 20.dp).padding(top = 16.dp)
                     )
                 }
 
@@ -351,15 +241,15 @@ fun AgentServicesDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Ligne 1: 4 boutons identiques au dashboard
+                        // Ligne 1: Opérations Clients
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             ToofanActionSquare(
-                                title = "Dépôt\nClient",
+                                title = "Dépôt\nEspèces",
                                 bgColor = Color(0xFF059669),
                                 icon = Icons.Default.ArrowDownward,
                                 modifier = Modifier.weight(1f),
@@ -367,19 +257,11 @@ fun AgentServicesDialog(
                             )
 
                             ToofanActionSquare(
-                                title = "Retrait\nClient",
+                                title = "Retrait\nEspèces",
                                 bgColor = Color(0xFFFF6600),
                                 icon = Icons.Default.ArrowUpward,
                                 modifier = Modifier.weight(1f),
                                 onClick = { activeModal = "withdraw" }
-                            )
-
-                            ToofanActionSquare(
-                                title = "Prêt\nLoan Me",
-                                bgColor = Color(0xFF7C3AED),
-                                icon = Icons.Default.Payments,
-                                modifier = Modifier.weight(1f),
-                                onClick = { activeModal = "loan" }
                             )
 
                             ToofanActionSquare(
@@ -391,13 +273,21 @@ fun AgentServicesDialog(
                             )
                         }
 
-                        // Ligne 2: 2 boutons d'actions
+                        // Ligne 2: Autres Services
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             ToofanActionSquare(
-                                title = "Historique\nOpérations",
+                                title = "Prêt\nLoan Me",
+                                bgColor = Color(0xFF7C3AED),
+                                icon = Icons.Default.Payments,
+                                modifier = Modifier.weight(1f),
+                                onClick = { activeModal = "loan" }
+                            )
+
+                            ToofanActionSquare(
+                                title = "Historique\nAgent",
                                 bgColor = Color(0xFF0066FF),
                                 icon = Icons.Default.Receipt,
                                 modifier = Modifier.weight(1f),
@@ -405,7 +295,7 @@ fun AgentServicesDialog(
                             )
 
                             ToofanActionSquare(
-                                title = "Balayer\nCommissions",
+                                title = "Virement\nComm.",
                                 bgColor = Color(0xFF00B386),
                                 icon = Icons.Default.SwapHoriz,
                                 modifier = Modifier.weight(1f),
@@ -415,60 +305,7 @@ fun AgentServicesDialog(
                     }
                 }
 
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp)
-                            .clickable { activeModal = "history" },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        shadowElevation = 0.5.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(Color(0xFF0F172A).copy(alpha = 0.08f), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.History,
-                                        contentDescription = null,
-                                        tint = Color(0xFF0F172A),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "Historique des Opérations Agent",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF0F172A)
-                                )
-                            }
-
-                            Text(
-                                text = "${uiState.agentOperationsHistory.size} op.",
-                                fontFamily = MulishFontFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF64748B)
-                            )
-                        }
-                    }
-                }
-
-                item { Spacer(modifier = Modifier.height(20.dp)) }
+                item { Spacer(modifier = Modifier.height(30.dp)) }
             }
         }
     }
@@ -563,7 +400,7 @@ private fun AgentCommissionCard(
         modifier = Modifier
             .width(160.dp)
             .height(110.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = color),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
@@ -621,9 +458,9 @@ private fun AgentActionSquare(
     Surface(
         modifier = modifier
             .height(82.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(8.dp),
         color = Color.White,
         shadowElevation = 1.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -696,7 +533,7 @@ private fun AgentDepositModal(
         onDismissRequest = onClose,
         sheetState = sheetState,
         containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
     ) {
         Column(
             modifier = Modifier
@@ -816,7 +653,7 @@ private fun AgentDepositModal(
                         // Reçu détaillé
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = Color.White,
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                         ) {
@@ -914,7 +751,7 @@ private fun AgentDepositModal(
                             Button(
                                 onClick = onReset,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f).height(46.dp)
                             ) {
                                 Text("Nouveau Dépôt", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
@@ -922,7 +759,7 @@ private fun AgentDepositModal(
                             Button(
                                 onClick = onClose,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.weight(1f).height(46.dp)
                             ) {
                                 Text("Fermer", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
@@ -963,7 +800,7 @@ private fun AgentDepositModal(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -971,7 +808,7 @@ private fun AgentDepositModal(
                         onClick = onOpenQrScanner,
                         modifier = Modifier
                             .size(54.dp)
-                            .background(Color(0xFF0F172A), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
@@ -984,7 +821,7 @@ private fun AgentDepositModal(
                 if (uiState.agentDepositError != null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(6.dp),
                         color = Color(0xFFFEF2F2),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECACA))
                     ) {
@@ -1010,7 +847,7 @@ private fun AgentDepositModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
                 ) {
                     if (uiState.isAgentDepositLoading) {
@@ -1131,7 +968,7 @@ private fun AgentDepositModal(
                     Button(
                         onClick = onReset,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Text("Modifier", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
@@ -1141,7 +978,7 @@ private fun AgentDepositModal(
                         onClick = onConfirmClient,
                         enabled = !uiState.isAgentDepositLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         if (uiState.isAgentDepositLoading) {
@@ -1168,7 +1005,7 @@ private fun AgentDepositModal(
 
                 // Mini client banner
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = Color(0xFFF1F5F9),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1205,7 +1042,7 @@ private fun AgentDepositModal(
                     returnedBalances.forEach { (curr, bal) ->
                         val isSelected = uiState.agentDepositCurrency == curr
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) Color(0xFF059669) else Color(0xFFF8FAFC),
                             border = androidx.compose.foundation.BorderStroke(
                                 1.5.dp,
@@ -1241,7 +1078,7 @@ private fun AgentDepositModal(
                     label = { Text("Montant reçu en espèces (${uiState.agentDepositCurrency})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     trailingIcon = {
                         Text(
                             text = uiState.agentDepositCurrency,
@@ -1314,7 +1151,7 @@ private fun AgentDepositModal(
                     Button(
                         onClick = onReset,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Text("Retour", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
@@ -1324,7 +1161,7 @@ private fun AgentDepositModal(
                         onClick = onSubmitAmount,
                         enabled = !uiState.isAgentDepositLoading && (uiState.agentDepositAmount.toDoubleOrNull() ?: 0.0) > 0.0,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1.5f).height(48.dp)
                     ) {
                         if (uiState.isAgentDepositLoading) {
@@ -1345,7 +1182,7 @@ private fun AgentDepositModal(
                 // Financial recap card strictly populated from server response
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = Color(0xFFF8FAFC),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
                 ) {
@@ -1424,7 +1261,7 @@ private fun AgentDepositModal(
                         Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color(0xFF64748B))
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
 
                 if (uiState.agentDepositError != null) {
@@ -1443,7 +1280,7 @@ private fun AgentDepositModal(
                     Button(
                         onClick = onReset,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Text("Annuler", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
@@ -1455,7 +1292,7 @@ private fun AgentDepositModal(
                         modifier = Modifier
                             .weight(1.5f)
                             .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
                     ) {
                         if (uiState.isAgentDepositLoading) {
@@ -1495,7 +1332,7 @@ private fun AgentWithdrawModal(
         onDismissRequest = onClose,
         sheetState = sheetState,
         containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1525,7 +1362,7 @@ private fun AgentWithdrawModal(
                 val res = uiState.agentWithdrawSuccess
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB))
                 ) {
                     Column(
@@ -1564,16 +1401,16 @@ private fun AgentWithdrawModal(
                         Button(
                             onClick = onReset,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(6.dp)
                         ) {
                             Text("Nouveau Retrait", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             } else if (uiState.agentWithdrawStep == 1) {
-                // Étape 1 : Initialisation de la demande
+                // Étape 1 : Identification du client
                 Text(
-                    text = "Initiez le retrait pour le client. Il devra vous fournir l'OTP reçu pour confirmer.",
+                    text = "Identifiez d'abord le compte client à débiter.",
                     fontFamily = MulishFontFamily,
                     fontSize = 12.sp,
                     color = Color(0xFF64748B)
@@ -1588,7 +1425,7 @@ private fun AgentWithdrawModal(
                         onValueChange = onClientRefChange,
                         label = { Text("Numéro ou Wallet ID client") },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFFD97706),
                             focusedLabelColor = Color(0xFFD97706)
@@ -1599,13 +1436,55 @@ private fun AgentWithdrawModal(
                         onClick = onOpenQrScanner,
                         modifier = Modifier
                             .size(54.dp)
-                            .background(Color(0xFF0F172A), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = "Scanner",
                             tint = Color(0xFF00C48C)
                         )
+                    }
+                }
+
+                if (uiState.agentWithdrawError != null) {
+                    Text(
+                        text = uiState.agentWithdrawError,
+                        fontFamily = MulishFontFamily,
+                        color = Color(0xFFDC2626),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Button(
+                    onClick = onInitiate, // Step 1 -> Step 2 (Search)
+                    enabled = !uiState.isAgentWithdrawLoading && uiState.agentWithdrawClientRef.isNotEmpty(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                ) {
+                    if (uiState.isAgentWithdrawLoading) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("Vérifier l'utilisateur", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (uiState.agentWithdrawStep == 2) {
+                // Étape 2 : Saisie du Montant
+                val client = uiState.agentWithdrawFoundClient
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFFEF3C7).copy(alpha = 0.5f)
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFFD97706))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(text = client?.fullName ?: "Client CashPay", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(text = "Wallet ID: ${client?.walletId ?: uiState.agentWithdrawClientRef}", fontSize = 11.sp, color = Color(0xFF64748B))
+                        }
                     }
                 }
 
@@ -1635,40 +1514,88 @@ private fun AgentWithdrawModal(
                     label = { Text("Montant à retirer") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFFD97706),
                         focusedLabelColor = Color(0xFFD97706)
                     )
                 )
 
-                // Canal de transmission de l'OTP au client
+                if (uiState.agentWithdrawError != null) {
+                    Text(
+                        text = uiState.agentWithdrawError,
+                        fontFamily = MulishFontFamily,
+                        color = Color(0xFFDC2626),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Button(
+                    onClick = onInitiate, // Step 2 -> Step 3 (Submit Amount)
+                    enabled = !uiState.isAgentWithdrawLoading && uiState.agentWithdrawAmount.isNotEmpty(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                ) {
+                    if (uiState.isAgentWithdrawLoading) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("Continuer vers le canal", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (uiState.agentWithdrawStep == 3) {
+                // Étape 3 : Choix du Canal
                 Text(
-                    text = "Envoyer l'OTP de confirmation via :",
+                    text = "Choisissez le canal pour envoyer l'OTP au client :",
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = Color(0xFF475569)
                 )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("sms" to "SMS", "whatsapp" to "WhatsApp", "app" to "App").forEach { (code, label) ->
+
+                val channels = uiState.agentWithdrawOtpChannels.ifEmpty { listOf("sms", "whatsapp", "app") }
+                
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    channels.forEach { code ->
                         val selected = uiState.agentWithdrawChannel == code
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = if (selected) Color(0xFF0F172A) else Color(0xFFF1F5F9),
                             modifier = Modifier
-                                .weight(1f)
-                                .clickable { onChannelChange(code) }
+                                .fillMaxWidth()
+                                .clickable { onChannelChange(code) },
+                            border = BorderStroke(1.dp, if (selected) Color(0xFF0F172A) else Color(0xFFE2E8F0))
                         ) {
-                            Text(
-                                text = label,
-                                fontFamily = MulishFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = if (selected) Color.White else Color(0xFF334155),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 10.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (code == "whatsapp") Icons.Default.Chat else if (code == "sms") Icons.Default.Sms else Icons.Default.Smartphone,
+                                    contentDescription = null,
+                                    tint = if (selected) Color.White else Color(0xFF64748B),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = when(code) {
+                                        "whatsapp" -> "WhatsApp"
+                                        "sms" -> "SMS"
+                                        "app" -> "Notification App"
+                                        else -> code.uppercase()
+                                    },
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = if (selected) Color.White else Color(0xFF334155)
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                if (selected) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF00C48C), modifier = Modifier.size(20.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -1683,25 +1610,25 @@ private fun AgentWithdrawModal(
                 }
 
                 Button(
-                    onClick = onInitiate,
+                    onClick = onInitiate, // Step 3 -> Step 4 (Initiate)
                     enabled = !uiState.isAgentWithdrawLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
                 ) {
                     if (uiState.isAgentWithdrawLoading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                     } else {
-                        Text("Initier le Retrait (Envoi OTP)", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        Text("Envoyer l'OTP au Client", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
-                // Étape 2 : Saisie de l'OTP client
+                // Étape 4 : Saisie de l'OTP client
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = Color(0xFFFEF3C7)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -1713,7 +1640,7 @@ private fun AgentWithdrawModal(
                             color = Color(0xFF92400E)
                         )
                         Text(
-                            text = "Le client (${uiState.agentWithdrawClientRef}) doit vous fournir le code reçu par ${uiState.agentWithdrawChannel.uppercase()}.",
+                            text = "Le client doit vous fournir le code reçu par ${uiState.agentWithdrawChannel.uppercase()}.",
                             fontFamily = MulishFontFamily,
                             fontSize = 11.sp,
                             color = Color(0xFFB45309)
@@ -1728,7 +1655,7 @@ private fun AgentWithdrawModal(
                     placeholder = { Text("Saisissez les 6 chiffres") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFFD97706),
                         focusedLabelColor = Color(0xFFD97706)
@@ -1746,17 +1673,17 @@ private fun AgentWithdrawModal(
 
                 Button(
                     onClick = onSubmitOtp,
-                    enabled = !uiState.isAgentWithdrawLoading,
+                    enabled = !uiState.isAgentWithdrawLoading && uiState.agentWithdrawClientOtp.length >= 4,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
                 ) {
                     if (uiState.isAgentWithdrawLoading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                     } else {
-                        Text("Confirmer le Retrait avec l'OTP", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                        Text("Confirmer le Retrait", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1788,7 +1715,7 @@ private fun AgentLoanModal(
         onDismissRequest = onClose,
         sheetState = sheetState,
         containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1818,7 +1745,7 @@ private fun AgentLoanModal(
                 val res = uiState.agentLoanRepaySuccess
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E8FF))
                 ) {
                     Column(
@@ -1849,7 +1776,7 @@ private fun AgentLoanModal(
                         Button(
                             onClick = onReset,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(6.dp)
                         ) {
                             Text("Nouveau Remboursement", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                         }
@@ -1865,7 +1792,7 @@ private fun AgentLoanModal(
                         onValueChange = onClientRefChange,
                         label = { Text("Numéro ou Wallet ID client") },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
@@ -1873,7 +1800,7 @@ private fun AgentLoanModal(
                         enabled = !uiState.isAgentSearchingLoan,
                         modifier = Modifier
                             .size(54.dp)
-                            .background(Color(0xFF7C3AED), RoundedCornerShape(12.dp))
+                            .background(Color(0xFF7C3AED), RoundedCornerShape(8.dp))
                     ) {
                         if (uiState.isAgentSearchingLoan) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
@@ -1896,7 +1823,7 @@ private fun AgentLoanModal(
                 if (target?.loan != null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = Color(0xFFF3E8FF)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -1923,7 +1850,7 @@ private fun AgentLoanModal(
                         label = { Text("Montant à rembourser (${uiState.agentLoanCurrency})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
 
                     OutlinedTextField(
@@ -1933,7 +1860,7 @@ private fun AgentLoanModal(
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
 
                     if (uiState.agentLoanRepayError != null) {
@@ -1951,7 +1878,7 @@ private fun AgentLoanModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                     ) {
                         if (uiState.isAgentLoanRepayLoading) {
@@ -1982,7 +1909,7 @@ private fun AgentHistoryModal(
         onDismissRequest = onClose,
         sheetState = sheetState,
         containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
     ) {
         Column(
             modifier = Modifier
@@ -2039,7 +1966,7 @@ private fun AgentHistoryModal(
                     items(history, key = { it.id }) { op ->
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = Color.White,
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                         ) {
@@ -2118,7 +2045,7 @@ private fun SweepCommissionModalDialog(
         onDismissRequest = onClose,
         sheetState = sheetState,
         containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
     ) {
         Column(
             modifier = Modifier
@@ -2178,7 +2105,7 @@ private fun SweepCommissionModalDialog(
                         else -> uiState.agentCommissionUsd
                     }
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = if (selected) Color(0xFF0F172A) else Color(0xFFF1F5F9),
                         modifier = Modifier
                             .weight(1f)
@@ -2208,7 +2135,7 @@ private fun SweepCommissionModalDialog(
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = Color(0xFFF0FDF4),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0))
             ) {
@@ -2238,7 +2165,7 @@ private fun SweepCommissionModalDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = if (uiState.sweepIsAll) Color(0xFF00C48C) else Color(0xFFE2E8F0),
                     modifier = Modifier
                         .weight(1f)
@@ -2256,7 +2183,7 @@ private fun SweepCommissionModalDialog(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = if (!uiState.sweepIsAll) Color(0xFF00C48C) else Color(0xFFE2E8F0),
                     modifier = Modifier
                         .weight(1f)
@@ -2281,7 +2208,7 @@ private fun SweepCommissionModalDialog(
                     label = { Text("Montant à basculer (${uiState.sweepCurrency})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
             }
 
@@ -2299,7 +2226,7 @@ private fun SweepCommissionModalDialog(
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(8.dp)
             )
 
             if (uiState.sweepCommissionError != null) {
@@ -2327,7 +2254,7 @@ private fun SweepCommissionModalDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C48C))
             ) {
                 if (uiState.isSweepingCommission) {

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.QrCode
@@ -203,6 +204,7 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ToofanBgColor)
+                .padding(innerPadding)
         ) {
             when (uiState.selectedTab) {
                 0 -> ToofanDashboardTab(
@@ -249,6 +251,7 @@ fun DashboardScreen(
     // Quick Action Launcher Dialog (Triggered by bottom central "+")
     if (showActionPlusDialog) {
         ActionPlusModalDialog(
+            userProfile = userProfile,
             onDismiss = { showActionPlusDialog = false },
             onSendScan = {
                 showActionPlusDialog = false
@@ -265,6 +268,22 @@ fun DashboardScreen(
             onWithdraw = {
                 showActionPlusDialog = false
                 dashboardViewModel.openWithdrawalDialog()
+            },
+            onAgentDeposit = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentServicesScreen(tab = 0)
+            },
+            onAgentWithdraw = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentServicesScreen(tab = 0)
+            },
+            onAgentLoan = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentServicesScreen(tab = 0)
+            },
+            onAgentHistory = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentServicesScreen(tab = 1)
             }
         )
     }
@@ -332,6 +351,7 @@ fun DashboardScreen(
         onOpenQrScanner = { showQrScannerDialog = true },
         onTabSelected = { dashboardViewModel.setAgentActiveTab(it) },
         onToggleAgentBalanceVisibility = { dashboardViewModel.toggleAgentBalanceVisibility() },
+        onCentralActionClick = { showActionPlusDialog = true },
         onOpenSweepDialog = { dashboardViewModel.openSweepCommissionDialog(it) },
         onCloseSweepDialog = { dashboardViewModel.closeSweepCommissionDialog() },
         onSweepCurrencyChange = { dashboardViewModel.setSweepCurrency(it) },
@@ -354,7 +374,13 @@ fun DashboardScreen(
         onWithdrawCurrencyChange = { dashboardViewModel.setAgentWithdrawCurrency(it) },
         onWithdrawChannelChange = { dashboardViewModel.setAgentWithdrawChannel(it) },
         onWithdrawClientOtpChange = { dashboardViewModel.setAgentWithdrawClientOtp(it) },
-        onInitiateWithdraw = { dashboardViewModel.initiateAgentWithdraw(userProfile?.id ?: 1) },
+        onInitiateWithdraw = {
+            when (uiState.agentWithdrawStep) {
+                1 -> dashboardViewModel.searchAndIdentifyClientForWithdraw()
+                2 -> dashboardViewModel.submitAmountForWithdraw()
+                3 -> dashboardViewModel.initiateAgentWithdraw(userProfile?.id ?: 1)
+            }
+        },
         onSubmitWithdrawOtp = { dashboardViewModel.submitAgentWithdrawOtp(userProfile?.id ?: 1) },
         onResetWithdraw = { dashboardViewModel.resetAgentWithdraw() },
         onLoanClientRefChange = { dashboardViewModel.setAgentLoanClientRef(it) },
@@ -517,7 +543,7 @@ fun DashboardScreen(
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = ToofanWhite,
                         shadowElevation = 2.dp,
                         modifier = Modifier
@@ -1257,7 +1283,7 @@ private fun ToofanDashboardTab(
                                         .fillMaxWidth()
                                         .padding(horizontal = 20.dp)
                                         .height(180.dp),
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     elevation = CardDefaults.cardElevation(3.dp)
                                 ) {
                                     Box(
@@ -1371,7 +1397,7 @@ private fun ToofanDashboardTab(
                                         .fillMaxWidth()
                                         .padding(horizontal = 20.dp)
                                         .height(180.dp),
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     elevation = CardDefaults.cardElevation(3.dp)
                                 ) {
                                     Box(
@@ -1485,7 +1511,7 @@ private fun ToofanDashboardTab(
                                         .fillMaxWidth()
                                         .padding(horizontal = 20.dp)
                                         .height(180.dp),
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     elevation = CardDefaults.cardElevation(3.dp)
                                 ) {
                                     Box(
@@ -1599,7 +1625,7 @@ private fun ToofanDashboardTab(
                                         .fillMaxWidth()
                                         .padding(horizontal = 20.dp)
                                         .height(180.dp),
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
                                     elevation = CardDefaults.cardElevation(3.dp)
                                 ) {
@@ -1809,7 +1835,7 @@ private fun ToofanDashboardTab(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = Color.White
                         ) {
                             Text(
@@ -2062,7 +2088,7 @@ private fun ToofanDashboardTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF1F5F9)
                 ) {
                     Row(
@@ -2078,7 +2104,7 @@ private fun ToofanDashboardTab(
                                     .weight(1f)
                                     .fillMaxHeight()
                                     .clickable { dashboardViewModel.setTxDirectionFilter(code) },
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = if (selected) Color(0xFF00C48C) else Color.Transparent
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -2111,7 +2137,7 @@ private fun ToofanDashboardTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = ToofanWhite),
                 elevation = CardDefaults.cardElevation(1.dp)
             ) {
@@ -2271,7 +2297,7 @@ private fun TransactionItemRow(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(10.dp),
         color = Color.White,
         shadowElevation = 0.5.dp,
         border = BorderStroke(1.dp, Color(0xFFF1F5F9))
@@ -2714,7 +2740,7 @@ private fun ToofanHistoryTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF1F5F9)
                 ) {
                     Row(
@@ -2730,7 +2756,7 @@ private fun ToofanHistoryTab(
                                     .weight(1f)
                                     .fillMaxHeight()
                                     .clickable { dashboardViewModel.setTxDirectionFilter(code) },
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = if (selected) Color(0xFF00C48C) else Color.Transparent
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -2853,7 +2879,7 @@ private fun AllTransactionsDialog(
                         val selected = uiState.txDirectionFilter == code
                         Surface(
                             modifier = Modifier.clickable { dashboardViewModel.setTxDirectionFilter(code) },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (selected) ToofanGreen else Color.White,
                             border = BorderStroke(1.dp, if (selected) ToofanGreen else Color.LightGray)
                         ) {
@@ -2875,7 +2901,7 @@ private fun AllTransactionsDialog(
                         val selected = uiState.txDateFilter == code
                         Surface(
                             modifier = Modifier.clickable { dashboardViewModel.setTxDateFilter(code) },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (selected) ToofanBlue else Color.White,
                             border = BorderStroke(1.dp, if (selected) ToofanBlue else Color.LightGray)
                         ) {
@@ -3033,7 +3059,7 @@ private fun ToofanProfileTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = ToofanWhite),
                 elevation = CardDefaults.cardElevation(1.dp)
             ) {
@@ -3190,7 +3216,7 @@ private fun ToofanProfileCategorySection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = ToofanWhite),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
@@ -3273,7 +3299,7 @@ private fun ToofanSecurityTab(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = ToofanWhite),
                 elevation = CardDefaults.cardElevation(1.dp)
             ) {
@@ -3323,7 +3349,7 @@ private fun ToofanSecurityTab(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = ToofanWhite),
                 elevation = CardDefaults.cardElevation(1.dp)
             ) {
@@ -3759,7 +3785,7 @@ fun ToofanCardsAndSecurityTab(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 12.dp),
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(containerColor = ToofanWhite),
                             border = BorderStroke(1.5.dp, ToofanGrey1.copy(alpha = 0.5f))
                         ) {
@@ -3915,7 +3941,7 @@ fun CashPayCardComponent(
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(10.dp),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Box(
@@ -5170,7 +5196,7 @@ fun ContactsPageDialog(
 
                 if (!hasContactPermission) {
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = Color.White,
                         shadowElevation = 2.dp,
                         modifier = Modifier.fillMaxWidth()
@@ -5394,7 +5420,7 @@ private fun ContactItemCard(
             }
 
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = Color(0xFF00C48C),
                 modifier = Modifier.clickable(onClick = onSendClick)
             ) {
@@ -5467,7 +5493,7 @@ private fun OtherContactItemCard(
             }
 
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = Color(0xFFF1F5F9),
                 modifier = Modifier.clickable {
                     Toast.makeText(context, "Invitation CashPay envoyée à ${contact.name}", Toast.LENGTH_SHORT).show()
@@ -5570,14 +5596,23 @@ fun ServicesDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionPlusModalDialog(
+    userProfile: com.example.data.local.UserProfileEntity?,
     onDismiss: () -> Unit,
     onSendScan: () -> Unit,
     onReceiveQr: () -> Unit,
     onPayPos: () -> Unit,
-    onWithdraw: () -> Unit
+    onWithdraw: () -> Unit,
+    // Agent actions
+    onAgentDeposit: () -> Unit = {},
+    onAgentWithdraw: () -> Unit = {},
+    onAgentLoan: () -> Unit = {},
+    onAgentHistory: () -> Unit = {}
 ) {
+    val isAgent = userProfile?.role?.lowercase()?.trim() == "agent"
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -5600,7 +5635,7 @@ fun ActionPlusModalDialog(
                     }
                 }
                 Text(
-                    text = "Actions Rapides CashPay",
+                    text = if (isAgent) "Menu Agent CashPay" else "Actions Rapides CashPay",
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
@@ -5614,47 +5649,73 @@ fun ActionPlusModalDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Choisissez l'opération que vous souhaitez effectuer :",
+                    text = if (isAgent) "Services opérationnels pour agents agréés :" else "Choisissez l'opération que vous souhaitez effectuer :",
                     fontSize = 12.sp,
                     fontFamily = MulishFontFamily,
                     color = Color(0xFF64748B)
                 )
 
-                // Option 1: Envoyer de l'argent
-                ActionPlusTile(
-                    title = "Envoyer de l'argent",
-                    subtitle = "Scanner un QR Code ou entrer un Wallet ID / N°",
-                    icon = Icons.Default.Send,
-                    iconBg = Color(0xFF00C48C),
-                    onClick = onSendScan
-                )
-
-                // Option 2: Recevoir de l'argent
-                ActionPlusTile(
-                    title = "Recevoir des fonds",
-                    subtitle = "Afficher mon QR Code & mon Wallet ID",
-                    icon = Icons.Default.QrCode,
-                    iconBg = Color(0xFF55ACEE),
-                    onClick = onReceiveQr
-                )
-
-                // Option 3: Payer commerçant
-                ActionPlusTile(
-                    title = "Paiement Commerçant / POS",
-                    subtitle = "Scanner le QR Code d'un point de vente",
-                    icon = Icons.Default.ShoppingCart,
-                    iconBg = Color(0xFFFF8A71),
-                    onClick = onPayPos
-                )
-
-                // Option 4: Retrait auprès d'un Agent
-                ActionPlusTile(
-                    title = "Retrait Agent CashPay",
-                    subtitle = "Retirer du cash auprès d'un agent agréé",
-                    icon = Icons.Default.AccountBalanceWallet,
-                    iconBg = Color(0xFF7C3AED),
-                    onClick = onWithdraw
-                )
+                if (isAgent) {
+                    // Agent Actions
+                    ActionPlusTile(
+                        title = "Dépôt Espèces",
+                        subtitle = "Effectuer un dépôt sur le compte d'un client",
+                        icon = Icons.Default.ArrowDownward,
+                        iconBg = Color(0xFF059669),
+                        onClick = onAgentDeposit
+                    )
+                    ActionPlusTile(
+                        title = "Retrait Espèces",
+                        subtitle = "Initier un retrait pour un client (OTP)",
+                        icon = Icons.Default.ArrowUpward,
+                        iconBg = Color(0xFFFF6600),
+                        onClick = onAgentWithdraw
+                    )
+                    ActionPlusTile(
+                        title = "Prêt Loan Me",
+                        subtitle = "Rembourser le prêt d'un client",
+                        icon = Icons.Default.Payments,
+                        iconBg = Color(0xFF7C3AED),
+                        onClick = onAgentLoan
+                    )
+                    ActionPlusTile(
+                        title = "Historique Agent",
+                        subtitle = "Voir mes dernières commissions",
+                        icon = Icons.Default.Receipt,
+                        iconBg = Color(0xFF0066FF),
+                        onClick = onAgentHistory
+                    )
+                } else {
+                    // Standard Client Actions
+                    ActionPlusTile(
+                        title = "Envoyer de l'argent",
+                        subtitle = "Scanner un QR Code ou entrer un Wallet ID / N°",
+                        icon = Icons.Default.Send,
+                        iconBg = Color(0xFF00C48C),
+                        onClick = onSendScan
+                    )
+                    ActionPlusTile(
+                        title = "Recevoir des fonds",
+                        subtitle = "Afficher mon QR Code & mon Wallet ID",
+                        icon = Icons.Default.QrCode,
+                        iconBg = Color(0xFF55ACEE),
+                        onClick = onReceiveQr
+                    )
+                    ActionPlusTile(
+                        title = "Paiement Commerçant / POS",
+                        subtitle = "Scanner le QR Code d'un point de vente",
+                        icon = Icons.Default.ShoppingCart,
+                        iconBg = Color(0xFFFF8A71),
+                        onClick = onPayPos
+                    )
+                    ActionPlusTile(
+                        title = "Retrait Agent CashPay",
+                        subtitle = "Retirer du cash auprès d'un agent agréé",
+                        icon = Icons.Default.AccountBalanceWallet,
+                        iconBg = Color(0xFF7C3AED),
+                        onClick = onWithdraw
+                    )
+                }
             }
         },
         confirmButton = {
@@ -5754,23 +5815,12 @@ fun CashPaySettingsModal(
                                         color = ToofanMainDark
                                     )
                                     Text(
-                                        text = "Wallet: ${userProfile?.walletId ?: ""}",
+                                        text = "Wallet ID: ${userProfile?.walletId ?: ""}",
                                         fontSize = 11.sp,
                                         color = Color(0xFF64748B)
                                     )
                                 }
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (isAgentUser) ToofanGreen.copy(alpha = 0.15f) else Color(0xFFF1F5F9)
-                                ) {
-                                    Text(
-                                        text = if (isAgentUser) "AGENT" else "CLIENT",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isAgentUser) ToofanGreen else Color(0xFF64748B),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                // Removed redundant AGENT/CLIENT label per user feedback
                             }
 
                             HorizontalDivider(color = Color(0xFFE2E8F0))

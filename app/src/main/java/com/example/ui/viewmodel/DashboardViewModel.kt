@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 data class DashboardUiState(
     val selectedTab: Int = 0, // 0: Accueil / Wallet, 1: Profil Complet & Données, 2: Sécurité & PIN
@@ -93,44 +96,7 @@ data class DashboardUiState(
 
     // --- CONTACTS & PUBLIC PROFILE STATE ---
     val contactsList: List<com.example.data.model.PhoneContact> = emptyList(),
-    val recentCorrespondents: List<com.example.data.model.PhoneContact> = listOf(
-        com.example.data.model.PhoneContact(
-            name = "Jean Mukendi",
-            phone = "+243812345678",
-            normalizedPhone = "0812345678",
-            isCashPayUser = true,
-            publicProfile = com.example.data.model.PublicProfileDto(
-                walletId = "WAL-812345",
-                fullName = "Jean Mukendi",
-                profilePhotoUrl = "drawable:avatar_jean",
-                profilePhoto = "drawable:avatar_jean"
-            )
-        ),
-        com.example.data.model.PhoneContact(
-            name = "Marie Kabila",
-            phone = "+243823456789",
-            normalizedPhone = "0823456789",
-            isCashPayUser = true,
-            publicProfile = com.example.data.model.PublicProfileDto(
-                walletId = "WAL-823456",
-                fullName = "Marie Kabila",
-                profilePhotoUrl = "drawable:avatar_marie",
-                profilePhoto = "drawable:avatar_marie"
-            )
-        ),
-        com.example.data.model.PhoneContact(
-            name = "Koffi Olomide",
-            phone = "+243894567890",
-            normalizedPhone = "0894567890",
-            isCashPayUser = true,
-            publicProfile = com.example.data.model.PublicProfileDto(
-                walletId = "WAL-894567",
-                fullName = "Koffi Olomide",
-                profilePhotoUrl = "drawable:avatar_koffi",
-                profilePhoto = "drawable:avatar_koffi"
-            )
-        )
-    ),
+    val recentCorrespondents: List<com.example.data.model.PhoneContact> = emptyList(),
     val isContactsDialogOpen: Boolean = false,
     val isContactsPageOpen: Boolean = false,
     val isAddContactDialogOpen: Boolean = false,
@@ -251,9 +217,10 @@ data class DashboardUiState(
     val agentDepositSuccessDetail: com.example.data.model.AgentDepositDetailDto? = null,
     val agentDepositFinancialDetails: com.example.data.model.AgentDepositResponse? = null,
     val agentDepositSuccess: com.example.data.model.AgentDepositResponse? = null,
-    // Agent Withdraw (Demande & Confirmation OTP Client)
-    val agentWithdrawStep: Int = 1, // 1: Demande (Client, Montant, Canal SMS/WhatsApp), 2: Confirmation OTP Client
+    // Agent Withdraw (Multi-step: Identify -> Amount/Channel -> OTP)
+    val agentWithdrawStep: Int = 1, // 1: Identify, 2: Amount & Channel, 3: OTP Confirmation
     val agentWithdrawClientRef: String = "",
+    val agentWithdrawFoundClient: com.example.data.model.PublicProfileDto? = null,
     val agentWithdrawAmount: String = "",
     val agentWithdrawCurrency: String = "USD",
     val agentWithdrawChannel: String = "sms", // "sms" ou "whatsapp"
@@ -261,7 +228,10 @@ data class DashboardUiState(
     val isAgentWithdrawLoading: Boolean = false,
     val agentWithdrawError: String? = null,
     val agentWithdrawSuccess: com.example.data.model.AgentWithdrawResponse? = null,
-    // Agent Loan Repay
+    val agentWithdrawOperationId: String? = null,
+    val agentWithdrawOtpChannels: List<String> = emptyList(),
+    // Agent Loan Repay (Multi-step: Identify -> Amount -> Pin)
+    val agentLoanStep: Int = 1, // 1: Identify, 2: Amount, 3: PIN
     val agentLoanClientRef: String = "",
     val agentLoanTarget: com.example.data.model.AgentLoanTargetResponse? = null,
     val isAgentSearchingLoan: Boolean = false,
@@ -1234,42 +1204,59 @@ class DashboardViewModel(
         _uiState.update { it.copy(isLoadingContacts = true, contactsError = null) }
 
         viewModelScope.launch {
-            val resolvedList = mutableListOf<com.example.data.model.PhoneContact>()
-            rawContacts.forEach { (name, rawPhone) ->
-                // Normalize phone
-                val cleaned = rawPhone.replace(Regex("[^0-9+]"), "")
-                var normalized = cleaned
-                if (cleaned.startsWith("0")) {
-                    normalized = "243" + cleaned.substring(1)
-                } else if (!cleaned.startsWith("+") && !cleaned.startsWith("243") && cleaned.length == 9) {
-                    normalized = "243" + cleaned
-                }
-                normalized = normalized.replace("+", "")
+            try {
+                // Optimization: use a larger batch but limit total to reasonable number for UI
+                val contactsToSync = rawContacts.take(200) 
+                
+                val resolvedList = kotlinx.coroutines.coroutineScope {
+                    contactsToSync.map { (name, rawPhone) ->
+                        async {
+                            // Normalize phone
+                            val cleaned = rawPhone.replace(Regex("[^0-9+]"), "")
+                            var normalized = cleaned
+                            if (cleaned.startsWith("0")) {
+                                normalized = "243" + cleaned.substring(1)
+                            } else if (!cleaned.startsWith("+") && !cleaned.startsWith("243") && cleaned.length == 9) {
+                                normalized = "243" + cleaned
+                            }
+                            normalized = normalized.replace("+", "")
 
-                val searchResult = repository.searchProfileByPhone(normalized)
-                var phoneContact = com.example.data.model.PhoneContact(
-                    name = name,
-                    phone = rawPhone,
-                    normalizedPhone = normalized,
-                    isCashPayUser = false,
-                    publicProfile = null
-                )
+                            // Concurrent lookup
+                            val searchResult = repository.searchProfileByPhone(normalized)
+                            var phoneContact = com.example.data.model.PhoneContact(
+                                name = name,
+                                phone = rawPhone,
+                                normalizedPhone = normalized,
+                                isCashPayUser = false,
+                                publicProfile = null
+                            )
 
-                searchResult.onSuccess { resp ->
-                    if (resp.success && resp.found && resp.profile != null) {
-                        phoneContact = phoneContact.copy(
-                            isCashPayUser = true,
-                            publicProfile = resp.profile
-                        )
-                    }
+                            searchResult.onSuccess { resp ->
+                                if (resp.success && resp.found && resp.profile != null) {
+                                    phoneContact = phoneContact.copy(
+                                        isCashPayUser = true,
+                                        publicProfile = resp.profile
+                                    )
+                                }
+                            }
+                            phoneContact
+                        }
+                    }.awaitAll()
                 }
-                resolvedList.add(phoneContact)
-            }
-            _uiState.update {
-                it.copy(
-                    isLoadingContacts = false,
-                    contactsList = resolvedList.sortedByDescending { it.isCashPayUser }
-                )
+                
+                _uiState.update {
+                    it.copy(
+                        isLoadingContacts = false,
+                        contactsList = resolvedList.sortedByDescending { it.isCashPayUser }
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingContacts = false,
+                        contactsError = "Synchronisation impossible. Vérifiez votre connexion."
+                    )
+                }
             }
         }
     }
@@ -1331,63 +1318,90 @@ class DashboardViewModel(
         _uiState.update { it.copy(withdrawalCurrency = currency, withdrawalPreviewError = null) }
     }
 
+    private suspend fun resolveProfile(identifier: String): Result<com.example.data.model.PublicProfileResponse> {
+        val trimmed = identifier.trim()
+        if (trimmed.isEmpty()) return Result.failure(Exception("Identifiant vide"))
+        
+        // Identification plus robuste pour les agents via action start
+        val req = com.example.data.model.WithdrawActionRequest(
+            operation = "agent_withdraw",
+            action = "start",
+            identifier = trimmed
+        )
+        return try {
+            val res = repository.withdrawAction(req)
+            if (res.isSuccess && res.getOrNull()?.success == true) {
+                val target = res.getOrNull()?.target
+                if (target != null) {
+                    return Result.success(com.example.data.model.PublicProfileResponse(
+                        success = true,
+                        found = true,
+                        profile = com.example.data.model.PublicProfileDto(
+                            walletId = target.walletId ?: trimmed,
+                            fullName = target.fullName ?: target.firstName ?: trimmed,
+                            role = target.role,
+                            profilePhotoUrl = target.avatar,
+                            profilePhoto = target.avatar
+                        )
+                    ))
+                }
+            }
+            
+            // Fallback to standard search if specific action fails
+            val isNumeric = trimmed.all { it.isDigit() || it == '+' }
+            if (isNumeric && trimmed.length >= 9) {
+                val phoneRes = repository.searchProfileByPhone(trimmed)
+                if (phoneRes.isSuccess && phoneRes.getOrNull()?.found == true) {
+                    return phoneRes
+                }
+            }
+            repository.searchProfileByWallet(trimmed)
+        } catch (e: Exception) {
+            repository.searchProfileByWallet(trimmed)
+        }
+    }
+
     fun searchAgentAndProceed() {
         val state = _uiState.value
         val identifier = state.withdrawalRecipient.trim()
         if (identifier.isBlank()) {
-            _uiState.update { it.copy(agentSearchError = "Veuillez saisir un identifiant de portefeuille.") }
+            _uiState.update { it.copy(agentSearchError = "Veuillez saisir un identifiant de portefeuille ou numéro.") }
             return
         }
 
         if (state.withdrawalType == "mobile_money") {
-            // For mobile money, we don't look up a CashPay agent profile. Just proceed to amount input!
             _uiState.update { it.copy(withdrawalStep = 2) }
             return
         }
 
         _uiState.update { it.copy(isSearchingAgent = true, agentSearchError = null, searchedAgentProfile = null) }
         viewModelScope.launch {
-            repository.searchProfileByPhone(identifier)
+            resolveProfile(identifier)
                 .onSuccess { resp ->
                     _uiState.update { it.copy(isSearchingAgent = false) }
                     if (resp.success && resp.found && resp.profile != null) {
                         val profile = resp.profile
                         val role = profile.role?.lowercase() ?: "client"
 
-                        if (role == "client") {
+                        if (role == "agent") {
                             _uiState.update {
                                 it.copy(
-                                    agentSearchError = "CLIENT_FOUND", // Special marker to suggest Transfer redirect
-                                    searchedAgentProfile = profile
+                                    searchedAgentProfile = profile,
+                                    withdrawalStep = 2
                                 )
-                            }
-                        } else if (role == "agent") {
-                            // Check for boutiques
-                            if (profile.boutiques.isNullOrEmpty()) {
-                                _uiState.update {
-                                    it.copy(
-                                        agentSearchError = "Ce portefeuille n’est pas un portefeuille agent CashPay. (Aucune boutique associée)"
-                                    )
-                                }
-                            } else {
-                                _uiState.update {
-                                    it.copy(
-                                        searchedAgentProfile = profile,
-                                        withdrawalStep = 2 // Move to amount step
-                                    )
-                                }
                             }
                         } else {
                             _uiState.update {
                                 it.copy(
-                                    agentSearchError = "Ce portefeuille n’est pas un portefeuille agent CashPay."
+                                    agentSearchError = "Ce portefeuille n’est pas un compte Agent CashPay autorisé.",
+                                    searchedAgentProfile = profile
                                 )
                             }
                         }
                     } else {
                         _uiState.update {
                             it.copy(
-                                agentSearchError = "Aucun profil trouvé pour cet identifiant."
+                                agentSearchError = "Agent introuvable. Vérifiez l'ID Wallet ou le numéro."
                             )
                         }
                     }
@@ -1396,7 +1410,7 @@ class DashboardViewModel(
                     _uiState.update {
                         it.copy(
                             isSearchingAgent = false,
-                            agentSearchError = err.message ?: "Une erreur s'est produite."
+                            agentSearchError = err.message ?: "Impossible de trouver l'agent."
                         )
                     }
                 }
@@ -2669,26 +2683,87 @@ class DashboardViewModel(
             it.copy(
                 agentWithdrawStep = 1,
                 agentWithdrawClientRef = "",
+                agentWithdrawFoundClient = null,
                 agentWithdrawAmount = "",
                 agentWithdrawClientOtp = "",
                 agentWithdrawError = null,
                 agentWithdrawSuccess = null,
-                isAgentWithdrawLoading = false
+                isAgentWithdrawLoading = false,
+                agentWithdrawOperationId = null,
+                agentWithdrawOtpChannels = emptyList()
             )
         }
     }
 
-    fun initiateAgentWithdraw(userId: Long? = null) {
-        val effectiveUserId = getEffectiveUserId(userId)
-        val state = _uiState.value
-        val clientRef = state.agentWithdrawClientRef.trim()
-        val amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0
-        val channel = state.agentWithdrawChannel
-
+    fun searchAndIdentifyClientForWithdraw() {
+        val clientRef = _uiState.value.agentWithdrawClientRef.trim()
         if (clientRef.isBlank()) {
             _uiState.update { it.copy(agentWithdrawError = "Veuillez entrer le numéro ou Wallet ID du client.") }
             return
         }
+
+        _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null, agentWithdrawFoundClient = null) }
+
+        viewModelScope.launch {
+            // Identification plus robuste via l'action start spécifique au retrait client par agent
+            val req = com.example.data.model.WithdrawActionRequest(
+                operation = "client_withdraw",
+                action = "start",
+                identifier = clientRef
+            )
+            repository.withdrawAction(req)
+                .onSuccess { resp ->
+                    _uiState.update { it.copy(isAgentWithdrawLoading = false) }
+                    if (resp.success && resp.target != null) {
+                        _uiState.update {
+                            it.copy(
+                                agentWithdrawFoundClient = com.example.data.model.PublicProfileDto(
+                                    walletId = resp.target.walletId ?: clientRef,
+                                    fullName = resp.target.fullName ?: resp.target.firstName ?: clientRef,
+                                    role = resp.target.role,
+                                    profilePhotoUrl = resp.target.avatar,
+                                    profilePhoto = resp.target.avatar
+                                ),
+                                agentWithdrawOperationId = resp.operationId,
+                                agentWithdrawStep = 2,
+                                agentWithdrawError = null
+                            )
+                        }
+                    } else {
+                        // Tentative de résolution de secours via recherche standard
+                        resolveProfile(clientRef).onSuccess { pResp ->
+                             if (pResp.success && pResp.found && pResp.profile != null) {
+                                 _uiState.update {
+                                    it.copy(
+                                        agentWithdrawFoundClient = pResp.profile,
+                                        agentWithdrawStep = 2,
+                                        agentWithdrawError = null
+                                    )
+                                }
+                             } else {
+                                 _uiState.update { it.copy(agentWithdrawError = resp.error ?: "Client introuvable. Vérifiez l'identifiant.") }
+                             }
+                        }.onFailure {
+                             _uiState.update { it.copy(agentWithdrawError = resp.error ?: "Client introuvable.") }
+                        }
+                    }
+                }
+                .onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            isAgentWithdrawLoading = false,
+                            agentWithdrawError = err.message ?: "Client introuvable."
+                        )
+                    }
+                }
+        }
+    }
+
+    fun submitAmountForWithdraw() {
+        val state = _uiState.value
+        val amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0
+        val opId = state.agentWithdrawOperationId
+
         if (amount <= 0.0) {
             _uiState.update { it.copy(agentWithdrawError = "Veuillez entrer un montant valide.") }
             return
@@ -2697,23 +2772,84 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null) }
 
         viewModelScope.launch {
-            val result = repository.initiateAgentWithdraw(clientRef, amount, state.agentWithdrawCurrency, channel)
-            result.onSuccess { res: AgentWithdrawResponse ->
-                _uiState.update {
-                    it.copy(
-                        isAgentWithdrawLoading = false,
-                        agentWithdrawStep = 2,
-                        agentWithdrawError = null
-                    )
+            val req = com.example.data.model.WithdrawActionRequest(
+                operation = "client_withdraw",
+                action = "amount",
+                operationId = opId,
+                amount = amount,
+                currency = state.agentWithdrawCurrency
+            )
+            repository.withdrawAction(req)
+                .onSuccess { resp ->
+                    if (resp.success) {
+                        _uiState.update {
+                            it.copy(
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawOtpChannels = resp.otpChannels ?: listOf("sms", "whatsapp", "app"),
+                                agentWithdrawStep = 3,
+                                agentWithdrawError = null
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawError = resp.error ?: "Montant refusé par le système."
+                            )
+                        }
+                    }
                 }
-            }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        isAgentWithdrawLoading = false,
-                        agentWithdrawError = err.message ?: "Impossible d'initier le retrait."
-                    )
+                .onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            isAgentWithdrawLoading = false,
+                            agentWithdrawError = err.message ?: "Erreur lors de la validation du montant."
+                        )
+                    }
                 }
-            }
+        }
+    }
+
+    fun initiateAgentWithdraw(userId: Long? = null) {
+        val state = _uiState.value
+        val channel = state.agentWithdrawChannel
+        val opId = state.agentWithdrawOperationId
+
+        _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null) }
+
+        viewModelScope.launch {
+            val req = com.example.data.model.WithdrawActionRequest(
+                operation = "client_withdraw",
+                action = "otp_channel",
+                operationId = opId,
+                channel = channel
+            )
+            repository.withdrawAction(req)
+                .onSuccess { resp ->
+                    if (resp.success) {
+                        _uiState.update {
+                            it.copy(
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawStep = 4,
+                                agentWithdrawError = null
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isAgentWithdrawLoading = false,
+                                agentWithdrawError = resp.error ?: "Impossible d'envoyer l'OTP."
+                            )
+                        }
+                    }
+                }.onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            isAgentWithdrawLoading = false,
+                            agentWithdrawError = err.message ?: "Impossible d'initier le retrait."
+                        )
+                    }
+                }
         }
     }
 
@@ -2721,6 +2857,8 @@ class DashboardViewModel(
         val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val otp = state.agentWithdrawClientOtp.trim()
+        val opId = state.agentWithdrawOperationId
+        
         if (otp.length < 4) {
             _uiState.update { it.copy(agentWithdrawError = "Veuillez entrer le code OTP client.") }
             return
@@ -2729,52 +2867,58 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentWithdrawLoading = true, agentWithdrawError = null) }
 
         viewModelScope.launch {
-            val result = repository.confirmAgentWithdraw(
-                clientRef = state.agentWithdrawClientRef,
-                amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0,
-                currency = state.agentWithdrawCurrency,
+            val req = com.example.data.model.WithdrawActionRequest(
+                operation = "client_withdraw",
+                action = "otp",
+                operationId = opId,
                 otp = otp
             )
-            result.onSuccess { res: AgentWithdrawResponse ->
-                val amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0
-                val currency = state.agentWithdrawCurrency
-                val earnedComm = res.commission ?: (amount * 0.015)
-                val newUsdComm = if (currency == "USD") state.agentCommissionUsd + earnedComm else state.agentCommissionUsd
-                val newCdfComm = if (currency == "CDF") state.agentCommissionCdf + earnedComm else state.agentCommissionCdf
-                val newEurComm = if (currency == "EUR") state.agentCommissionEur + earnedComm else state.agentCommissionEur
+            repository.withdrawAction(req)
+                .onSuccess { resp ->
+                    val amount = state.agentWithdrawAmount.toDoubleOrNull() ?: 0.0
+                    val currency = state.agentWithdrawCurrency
+                    val earnedComm = resp.commission ?: (amount * 0.015)
+                    
+                    val newUsdComm = if (currency == "USD") state.agentCommissionUsd + earnedComm else state.agentCommissionUsd
+                    val newCdfComm = if (currency == "CDF") state.agentCommissionCdf + earnedComm else state.agentCommissionCdf
+                    val newEurComm = if (currency == "EUR") state.agentCommissionEur + earnedComm else state.agentCommissionEur
 
-                val op = com.example.data.model.AgentOperationRecord(
-                    type = "WITHDRAW",
-                    title = "Retrait Client (OTP)",
-                    clientRef = state.agentWithdrawClientRef,
-                    amount = amount,
-                    currency = currency,
-                    commission = earnedComm,
-                    reference = res.reference ?: "WTH-${System.currentTimeMillis() % 100000}",
-                    date = "Aujourd'hui, ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}",
-                    status = "Complété"
-                )
+                    val op = com.example.data.model.AgentOperationRecord(
+                        type = "WITHDRAW",
+                        title = "Retrait Client (OTP)",
+                        clientRef = state.agentWithdrawClientRef,
+                        amount = amount,
+                        currency = currency,
+                        commission = earnedComm,
+                        reference = resp.reference ?: "WTH-${System.currentTimeMillis() % 100000}",
+                        date = "Aujourd'hui, ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}",
+                        status = "Complété"
+                    )
 
-                _uiState.update {
-                    it.copy(
-                        isAgentWithdrawLoading = false,
-                        agentWithdrawSuccess = res,
-                        agentWithdrawError = null,
-                        agentCommissionUsd = newUsdComm,
-                        agentCommissionCdf = newCdfComm,
-                        agentCommissionEur = newEurComm,
-                        agentOperationsHistory = listOf(op) + it.agentOperationsHistory
-                    )
+                    _uiState.update {
+                        it.copy(
+                            isAgentWithdrawLoading = false,
+                            agentWithdrawSuccess = com.example.data.model.AgentWithdrawResponse(
+                                success = true,
+                                reference = resp.reference,
+                                commission = earnedComm
+                            ),
+                            agentWithdrawError = null,
+                            agentCommissionUsd = newUsdComm,
+                            agentCommissionCdf = newCdfComm,
+                            agentCommissionEur = newEurComm,
+                            agentOperationsHistory = listOf(op) + it.agentOperationsHistory
+                        )
+                    }
+                    fetchWallet(effectiveUserId)
+                }.onFailure { err ->
+                    _uiState.update {
+                        it.copy(
+                            isAgentWithdrawLoading = false,
+                            agentWithdrawError = err.message ?: "Code OTP invalide ou expiré."
+                        )
+                    }
                 }
-                fetchWallet(effectiveUserId)
-            }.onFailure { err ->
-                _uiState.update {
-                    it.copy(
-                        isAgentWithdrawLoading = false,
-                        agentWithdrawError = err.message ?: "Code OTP invalide ou expiré."
-                    )
-                }
-            }
         }
     }
 
@@ -2793,26 +2937,52 @@ class DashboardViewModel(
         _uiState.update { it.copy(isAgentSearchingLoan = true, agentLoanSearchError = null, agentLoanTarget = null) }
 
         viewModelScope.launch {
-            val result = repository.getAgentLoanTarget(clientRef)
-            result.onSuccess { res ->
-                _uiState.update {
-                    it.copy(
-                        isAgentSearchingLoan = false,
-                        agentLoanTarget = res,
-                        agentLoanAmount = res.loan?.remainingBalance?.toString() ?: "",
-                        agentLoanCurrency = res.loan?.currency ?: "USD",
-                        agentLoanSearchError = if (!res.success) res.error ?: "Client introuvable." else null
-                    )
+            // First resolve profile to be sure client exists
+            resolveProfile(clientRef).onSuccess { pResp ->
+                if (pResp.success && pResp.found && pResp.profile != null) {
+                    // Then search for their loan
+                    repository.getAgentLoanTarget(pResp.profile.walletId)
+                        .onSuccess { resp ->
+                            _uiState.update {
+                                it.copy(
+                                    isAgentSearchingLoan = false,
+                                    agentLoanTarget = resp,
+                                    agentLoanAmount = resp.loan?.remainingBalance?.toString() ?: "",
+                                    agentLoanCurrency = resp.loan?.currency ?: "USD",
+                                    agentLoanStep = 2, // Move to Amount step
+                                    agentLoanSearchError = if (!resp.success) resp.error ?: "Ce client n’a pas de prêt actif." else null
+                                )
+                            }
+                        }
+                        .onFailure { err ->
+                            _uiState.update {
+                                it.copy(
+                                    isAgentSearchingLoan = false,
+                                    agentLoanSearchError = "Ce client n’a pas de prêt actif à rembourser."
+                                )
+                            }
+                        }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isAgentSearchingLoan = false,
+                            agentLoanSearchError = "Utilisateur introuvable."
+                        )
+                    }
                 }
-            }.onFailure { err ->
+            }.onFailure {
                 _uiState.update {
                     it.copy(
                         isAgentSearchingLoan = false,
-                        agentLoanSearchError = err.message ?: "Recherche impossible."
+                        agentLoanSearchError = "Utilisateur introuvable."
                     )
                 }
             }
         }
+    }
+
+    fun proceedToLoanPin() {
+        _uiState.update { it.copy(agentLoanStep = 3) }
     }
 
     fun setAgentLoanAmount(amount: String) {
@@ -2830,6 +3000,7 @@ class DashboardViewModel(
     fun resetAgentLoanRepay() {
         _uiState.update {
             it.copy(
+                agentLoanStep = 1,
                 agentLoanClientRef = "",
                 agentLoanTarget = null,
                 agentLoanAmount = "",

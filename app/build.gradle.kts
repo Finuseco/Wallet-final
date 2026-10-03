@@ -17,7 +17,7 @@ android {
     minSdk = 24
     targetSdk = 36
     versionCode = 27
-    versionName = "27.0"
+    versionName = "CashPay V1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
