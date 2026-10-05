@@ -275,12 +275,14 @@ class CashPayRepository(
         return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
     }
 
-    suspend fun registerSendPhoneOtp(phone: String, accountType: String = "national"): Result<RegisterResponse> {
-        return register(RegisterRequest(action = "start", phone = phone, accountType = accountType.lowercase()))
+    suspend fun registerSendPhoneOtp(phone: String, accountType: String = "national", preferredOtpChannel: String = "sms"): Result<RegisterResponse> {
+        val cleanPhone = phone.filter { it.isDigit() }
+        return register(RegisterRequest(action = "start", phone = cleanPhone, accountType = accountType.lowercase(), preferredOtpChannel = preferredOtpChannel))
     }
 
     suspend fun registerVerifyPhoneOtp(phone: String, countryCode: String = "CD", country: String = "République démocratique du Congo", otp: String = ""): Result<RegisterResponse> {
-        return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
+        val cleanPhone = phone.filter { it.isDigit() }
+        return register(RegisterRequest(action = "verify_phone", phone = cleanPhone, countryCode = countryCode, country = country, otp = otp))
     }
 
     suspend fun registerSendEmailOtp(email: String): Result<RegisterResponse> {
@@ -557,6 +559,37 @@ class CashPayRepository(
                 Result.success(response.body()!!)
             } else {
                 val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors du transfert")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun exchangeCurrencies(
+        amount: Double,
+        fromCurrency: String,
+        toCurrency: String,
+        pin: String
+    ): Result<com.example.data.model.ExchangeResponse> {
+        return try {
+            ensureSessionToken()
+            val request = com.example.data.model.ExchangeRequest(
+                amount = amount,
+                fromCurrency = fromCurrency.uppercase().trim(),
+                toCurrency = toCurrency.uppercase().trim(),
+                pin = pin.trim()
+            )
+            val response = apiService.exchange(request)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.success) {
+                    Result.success(body)
+                } else {
+                    Result.failure(Exception(body.error ?: body.message ?: "Échec de l'échange de devises."))
+                }
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors de l'opération de change.")
                 Result.failure(Exception(msg))
             }
         } catch (e: Exception) {
@@ -892,7 +925,47 @@ class CashPayRepository(
         val trimmed = walletId.trim()
         if (trimmed.isBlank()) return Result.failure(Exception("Identifiant vide"))
 
-        // 1. Try agent deposit identify endpoint (identifies clients by wallet ID or ref)
+        // 1. Direct GET /api/v1/profile/by-wallet
+        try {
+            val directRes = apiService.searchProfileByWallet(trimmed)
+            if (directRes.isSuccessful && directRes.body() != null && directRes.body()?.found == true) {
+                val body = directRes.body()!!
+                val profile = body.profile
+                val resolvedProfile = if (profile != null) {
+                    val photo = profile.profilePhotoUrl ?: profile.profilePhoto
+                    val fullPhotoUrl = when {
+                        !photo.isNullOrBlank() && (photo.startsWith("http://") || photo.startsWith("https://")) -> photo
+                        !photo.isNullOrBlank() && photo.startsWith("/") -> "https://app.cashpay-all.com$photo"
+                        !photo.isNullOrBlank() -> "https://app.cashpay-all.com/$photo"
+                        else -> null
+                    }
+                    profile.copy(profilePhotoUrl = fullPhotoUrl, profilePhoto = fullPhotoUrl)
+                } else null
+                return Result.success(body.copy(profile = resolvedProfile))
+            }
+        } catch (_: Exception) {}
+
+        // 2. Direct GET /api/v1/profile/search
+        try {
+            val searchRes = apiService.searchProfile(trimmed)
+            if (searchRes.isSuccessful && searchRes.body() != null && searchRes.body()?.found == true) {
+                val body = searchRes.body()!!
+                val profile = body.profile
+                val resolvedProfile = if (profile != null) {
+                    val photo = profile.profilePhotoUrl ?: profile.profilePhoto
+                    val fullPhotoUrl = when {
+                        !photo.isNullOrBlank() && (photo.startsWith("http://") || photo.startsWith("https://")) -> photo
+                        !photo.isNullOrBlank() && photo.startsWith("/") -> "https://app.cashpay-all.com$photo"
+                        !photo.isNullOrBlank() -> "https://app.cashpay-all.com/$photo"
+                        else -> null
+                    }
+                    profile.copy(profilePhotoUrl = fullPhotoUrl, profilePhoto = fullPhotoUrl)
+                } else null
+                return Result.success(body.copy(profile = resolvedProfile))
+            }
+        } catch (_: Exception) {}
+
+        // 3. Try agent deposit identify endpoint (identifies clients by wallet ID or ref)
         try {
             val identifyReq = com.example.data.model.AgentDepositRequest(
                 step = "identify",
@@ -1552,6 +1625,98 @@ class CashPayRepository(
                 Result.success(response.body()!!)
             } else {
                 val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de supprimer la boutique.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // --- DEPOSIT OPERATIONS (MaxiCash Gateway) ---
+    suspend fun depositMobileMoney(
+        amount: Double,
+        currency: String = "USD",
+        operator: String,
+        phoneNumber: String,
+        countryCode: String = "CD"
+    ): Result<com.example.data.model.DepositMobileMoneyResponse> {
+        return try {
+            ensureSessionToken()
+            val req = com.example.data.model.DepositMobileMoneyRequest(
+                method = "mobile_money",
+                amount = amount,
+                currency = currency,
+                operator = operator,
+                phoneNumber = phoneNumber,
+                countryCode = countryCode
+            )
+            val response = apiService.depositMobileMoney(req)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.success) {
+                    Result.success(body)
+                } else {
+                    val msg = body.error ?: body.message ?: "Échec du dépôt Mobile Money."
+                    Result.failure(Exception(msg))
+                }
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors du dépôt Mobile Money.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun depositCard(
+        amount: Double,
+        currency: String = "USD"
+    ): Result<com.example.data.model.DepositGatewayResponse> {
+        return try {
+            ensureSessionToken()
+            val req = com.example.data.model.DepositGatewayRequest(
+                amount = amount,
+                currency = currency
+            )
+            val response = apiService.depositCard(req)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.success) {
+                    Result.success(body)
+                } else {
+                    val msg = body.error ?: "Impossible d'initialiser le paiement par carte."
+                    Result.failure(Exception(msg))
+                }
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible d'initialiser le paiement par carte.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun depositPayPal(
+        amount: Double,
+        currency: String = "USD"
+    ): Result<com.example.data.model.DepositGatewayResponse> {
+        return try {
+            ensureSessionToken()
+            val req = com.example.data.model.DepositGatewayRequest(
+                amount = amount,
+                currency = currency
+            )
+            val response = apiService.depositPayPal(req)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.success) {
+                    Result.success(body)
+                } else {
+                    val msg = body.error ?: "Impossible d'initialiser le paiement PayPal."
+                    Result.failure(Exception(msg))
+                }
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible d'initialiser le paiement PayPal.")
                 Result.failure(Exception(msg))
             }
         } catch (e: Exception) {

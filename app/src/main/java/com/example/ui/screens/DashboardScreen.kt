@@ -254,6 +254,14 @@ fun DashboardScreen(
                 showActionPlusDialog = false
                 dashboardViewModel.openWithdrawalDialog()
             },
+            onDeposit = {
+                showActionPlusDialog = false
+                dashboardViewModel.openDepositDialog()
+            },
+            onExchange = {
+                showActionPlusDialog = false
+                dashboardViewModel.openExchangeDialog()
+            },
             onAgentDeposit = {
                 showActionPlusDialog = false
                 dashboardViewModel.openAgentServicesScreen(tab = 0)
@@ -261,6 +269,10 @@ fun DashboardScreen(
             onAgentWithdraw = {
                 showActionPlusDialog = false
                 dashboardViewModel.openAgentServicesScreen(tab = 0)
+            },
+            onAgentExternalMoMo = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentExternalMoMoDialog()
             },
             onAgentLoan = {
                 showActionPlusDialog = false
@@ -426,6 +438,65 @@ fun DashboardScreen(
             onDismiss = { dashboardViewModel.closeWithdrawalDialog() }
         )
     }
+
+    // Deposit Dialog (MaxiCash Gateway: Mobile Money, Card, PayPal)
+    if (uiState.isDepositDialogOpen) {
+        DepositDialog(
+            uiState = uiState,
+            onDismiss = { dashboardViewModel.closeDepositDialog() },
+            onMethodChange = { dashboardViewModel.setDepositMethod(it) },
+            onAmountChange = { dashboardViewModel.setDepositAmount(it) },
+            onOperatorChange = { dashboardViewModel.setDepositOperator(it) },
+            onPhoneChange = { dashboardViewModel.setDepositPhoneNumber(it) },
+            onCountryCodeChange = { dashboardViewModel.setDepositCountryCode(it) },
+            onSubmit = { dashboardViewModel.submitDeposit() }
+        )
+    }
+
+    // Deposit WebView Dialog (Card and PayPal)
+    if (uiState.isDepositWebViewOpen && !uiState.depositPaymentUrl.isNullOrBlank()) {
+        DepositWebViewDialog(
+            url = uiState.depositPaymentUrl!!,
+            title = when (uiState.depositMethod) {
+                "card" -> "Paiement Carte MaxiCash"
+                "paypal" -> "Paiement PayPal MaxiCash"
+                else -> "Paiement Sécurisé MaxiCash"
+            },
+            reference = uiState.depositPendingReference,
+            onDismiss = { dashboardViewModel.closeDepositWebView() }
+        )
+    }
+
+    // Exchange Dialog (Currency Conversion)
+    ExchangeDialog(
+        isOpen = uiState.isExchangeDialogOpen,
+        walletResponse = uiState.walletResponse,
+        fromCurrency = uiState.exchangeFromCurrency,
+        toCurrency = uiState.exchangeToCurrency,
+        amount = uiState.exchangeAmount,
+        pin = uiState.exchangePin,
+        isLoading = uiState.isExchangeLoading,
+        errorMessage = uiState.exchangeError,
+        successResponse = uiState.exchangeSuccessResponse,
+        onFromCurrencyChange = { dashboardViewModel.setExchangeFromCurrency(it) },
+        onToCurrencyChange = { dashboardViewModel.setExchangeToCurrency(it) },
+        onSwapCurrencies = { dashboardViewModel.swapExchangeCurrencies() },
+        onAmountChange = { dashboardViewModel.setExchangeAmount(it) },
+        onPinChange = { dashboardViewModel.setExchangePin(it) },
+        onSubmit = { dashboardViewModel.submitExchange() },
+        onDismiss = { dashboardViewModel.closeExchangeDialog() },
+        onResetSuccess = { dashboardViewModel.resetExchangeSuccess() }
+    )
+
+    // Agent External Mobile Money Pull Dialog
+    AgentExternalMoMoDialog(
+        uiState = uiState,
+        onDismiss = { dashboardViewModel.closeAgentExternalMoMoDialog() },
+        onOperatorChange = { dashboardViewModel.setAgentExternalMoMoOperator(it) },
+        onPhoneChange = { dashboardViewModel.setAgentExternalMoMoPhone(it) },
+        onAmountChange = { dashboardViewModel.setAgentExternalMoMoAmount(it) },
+        onSubmit = { dashboardViewModel.submitAgentExternalMoMo() }
+    )
 
     // Add Contact Dialog
     if (uiState.isAddContactDialogOpen) {
@@ -866,7 +937,18 @@ fun DashboardScreen(
                                         .clickable { dashboardViewModel.setTransferSearchMode("wallet") },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("🆔 ID Wallet", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isWallet) Color.White else Color(0xFF475569))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AccountBalanceWallet,
+                                            contentDescription = null,
+                                            tint = if (isWallet) Color.White else Color(0xFF475569),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text("ID Wallet", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isWallet) Color.White else Color(0xFF475569))
+                                    }
                                 }
                                 Box(
                                     modifier = Modifier
@@ -877,7 +959,18 @@ fun DashboardScreen(
                                         .clickable { dashboardViewModel.setTransferSearchMode("phone") },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("📱 N° Téléphone", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (!isWallet) Color.White else Color(0xFF475569))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PhoneAndroid,
+                                            contentDescription = null,
+                                            tint = if (!isWallet) Color.White else Color(0xFF475569),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text("N° Téléphone", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (!isWallet) Color.White else Color(0xFF475569))
+                                    }
                                 }
                             }
 
@@ -1949,7 +2042,7 @@ private fun ToofanDashboardTab(
                             if (isAgentUser) {
                                 dashboardViewModel.openAgentServicesScreen(0)
                             } else {
-                                onOpenTransfer()
+                                dashboardViewModel.openDepositDialog()
                             }
                         }
                     )
@@ -4236,7 +4329,7 @@ fun BuyCardDialog(
 
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             TypeSelectBox(
-                                title = "💳 Carte virtuelle",
+                                title = "Carte virtuelle",
                                 description = "Disponible immédiatement, utilisation en ligne sur vos sites préférés.",
                                 priceText = if (uiState.purchaseBrand == "visa") "$ 5.00 (+ $ 1.00 frais)" else "$ 6.00 (+ $ 1.00 frais)",
                                 isSelected = uiState.purchaseType == "virtuelle",
@@ -4244,7 +4337,7 @@ fun BuyCardDialog(
                             )
 
                             TypeSelectBox(
-                                title = "💳 Carte physique",
+                                title = "Carte physique",
                                 description = "Carte livrée à votre domicile, retraits USSD + paiements en magasin.",
                                 priceText = "$ 10.00 (+ $ 2.00 frais)",
                                 isSelected = uiState.purchaseType == "physique",
@@ -4533,25 +4626,25 @@ fun ManageCardDialog(
 
                 // Actions List
                 CardOptionItem(
-                    title = "👁 Voir les détails de la carte",
+                    title = "Voir les détails de la carte",
                     description = "Afficher le numéro complet (PAN), CVV et date d'expiration.",
                     onClick = { viewModel.openRevealDetails() }
                 )
 
                 CardOptionItem(
-                    title = "🔑 Modifier le PIN",
+                    title = "Modifier le PIN",
                     description = "Mettre à jour le code de sécurité physique de votre carte.",
                     onClick = { viewModel.openChangePin() }
                 )
 
                 CardOptionItem(
-                    title = "💰 Source de financement",
+                    title = "Source de financement",
                     description = "Associer cette carte à votre compte principal ou un Certificat CPK.",
                     onClick = { viewModel.openFundingDialog() }
                 )
 
                 CardOptionItem(
-                    title = "🔒 Geler temporairement",
+                    title = "Geler temporairement",
                     description = "Suspendre tous les paiements sur cette carte à tout moment.",
                     onClick = {
                         if (card.status?.lowercase() == "frozen") {
@@ -5644,9 +5737,12 @@ fun ActionPlusModalDialog(
     onReceiveQr: () -> Unit,
     onPayPos: () -> Unit,
     onWithdraw: () -> Unit,
+    onDeposit: () -> Unit = {},
+    onExchange: () -> Unit = {},
     // Agent actions
     onAgentDeposit: () -> Unit = {},
     onAgentWithdraw: () -> Unit = {},
+    onAgentExternalMoMo: () -> Unit = {},
     onAgentLoan: () -> Unit = {},
     onAgentHistory: () -> Unit = {}
 ) {
@@ -5697,17 +5793,24 @@ fun ActionPlusModalDialog(
                 if (isAgent) {
                     // Agent Actions
                     ActionPlusTile(
-                        title = "Dépôt Espèces",
-                        subtitle = "Effectuer un dépôt sur le compte d'un client",
+                        title = "Dépôt Espèces Client",
+                        subtitle = "Effectuer un dépôt sur le compte d'un client CashPay",
                         icon = Icons.Default.ArrowDownward,
                         iconBg = Color(0xFF059669),
                         onClick = onAgentDeposit
                     )
                     ActionPlusTile(
-                        title = "Retrait Espèces",
-                        subtitle = "Initier un retrait pour un client (OTP)",
-                        icon = Icons.Default.ArrowUpward,
+                        title = "Retrait Mobile Money Direct (SIM)",
+                        subtitle = "Débiter la carte SIM du client (M-Pesa, Orange, Airtel, MTN)",
+                        icon = Icons.Default.PhoneAndroid,
                         iconBg = Color(0xFFFF6600),
+                        onClick = onAgentExternalMoMo
+                    )
+                    ActionPlusTile(
+                        title = "Retrait Espèces Client (OTP)",
+                        subtitle = "Initier un retrait pour un client CashPay",
+                        icon = Icons.Default.ArrowUpward,
+                        iconBg = Color(0xFFEA580C),
                         onClick = onAgentWithdraw
                     )
                     ActionPlusTile(
@@ -5719,13 +5822,27 @@ fun ActionPlusModalDialog(
                     )
                     ActionPlusTile(
                         title = "Historique Agent",
-                        subtitle = "Voir mes dernières commissions",
+                        subtitle = "Voir mes opérations et commissions",
                         icon = Icons.Default.Receipt,
                         iconBg = Color(0xFF0066FF),
                         onClick = onAgentHistory
                     )
                 } else {
                     // Standard Client Actions
+                    ActionPlusTile(
+                        title = "Recharger mon Compte (Dépôt)",
+                        subtitle = "Mobile Money, Carte bancaire ou PayPal via MaxiCash",
+                        icon = Icons.Default.Add,
+                        iconBg = Color(0xFF10B981),
+                        onClick = onDeposit
+                    )
+                    ActionPlusTile(
+                        title = "Change de Devises (Exchange)",
+                        subtitle = "Convertir USD, CDF, EUR instantanément",
+                        icon = Icons.Default.Payments,
+                        iconBg = Color(0xFF00E5FF),
+                        onClick = onExchange
+                    )
                     ActionPlusTile(
                         title = "Envoyer de l'argent",
                         subtitle = "Scanner un QR Code ou entrer un Wallet ID / N°",

@@ -21,6 +21,8 @@ import com.example.data.model.VerifyOtpRequest
 import com.example.data.model.VerifyOtpResponse
 import com.example.data.model.VerifyPinRequest
 import com.example.data.model.VerifyPinResponse
+import com.example.data.model.ExchangeRequest
+import com.example.data.model.ExchangeResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -68,6 +70,9 @@ interface CashPayApiService {
 
     @POST("api/v1/transfers")
     suspend fun transfer(@Body request: TransferRequest): Response<TransferResponse>
+
+    @POST("api/v1/exchange")
+    suspend fun exchange(@Body request: ExchangeRequest): Response<ExchangeResponse>
 
     @GET("api/v1/transactions")
     suspend fun getTransactions(
@@ -135,6 +140,16 @@ interface CashPayApiService {
     @GET("api/v1/profile/by-phone")
     suspend fun searchProfileByPhone(
         @Query("phone") phone: String
+    ): Response<com.example.data.model.PublicProfileResponse>
+
+    @GET("api/v1/profile/by-wallet")
+    suspend fun searchProfileByWallet(
+        @Query("walletId") walletId: String
+    ): Response<com.example.data.model.PublicProfileResponse>
+
+    @GET("api/v1/profile/search")
+    suspend fun searchProfile(
+        @Query("q") query: String
     ): Response<com.example.data.model.PublicProfileResponse>
 
     @GET("api/v1/withdrawals")
@@ -284,4 +299,20 @@ interface CashPayApiService {
     suspend fun deleteBoutique(
         @Path("id") boutiqueId: String
     ): Response<com.example.data.model.GenericShoppingResponse>
+
+    // --- DEPOSIT API (MaxiCash Gateway) ---
+    @POST("api/v1/deposit")
+    suspend fun depositMobileMoney(
+        @Body request: com.example.data.model.DepositMobileMoneyRequest
+    ): Response<com.example.data.model.DepositMobileMoneyResponse>
+
+    @POST("api/v1/deposit/card")
+    suspend fun depositCard(
+        @Body request: com.example.data.model.DepositGatewayRequest
+    ): Response<com.example.data.model.DepositGatewayResponse>
+
+    @POST("api/v1/deposit/paypal")
+    suspend fun depositPayPal(
+        @Body request: com.example.data.model.DepositGatewayRequest
+    ): Response<com.example.data.model.DepositGatewayResponse>
 }

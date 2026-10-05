@@ -66,11 +66,11 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.theme.MulishFontFamily
 
-// Immersive Premium Palette
-private val BrandBlueMidnight = Color(0xFF000E38)
-private val BrandBlueDark = Color(0xFF05113A)
-private val BrandOrange = Color(0xFFFF6600)
-private val BrandOrangeLight = Color(0xFFFF8533)
+// Immersive Premium Palette (OnChat Violet & Cyan Theme)
+private val BrandBlueMidnight = Color(0xFF0B0F19)
+private val BrandBlueDark = Color(0xFF13182E)
+private val BrandPurple = Color(0xFF8B5CF6)
+private val BrandCyan = Color(0xFF00E5FF)
 private val BrandGreen = Color(0xFF00C853)
 
 data class GuideStepData(
@@ -102,11 +102,11 @@ fun InstallationGuideScreen(
                 title = "Solde Multi-Devises en Temps Réel",
                 subtitle = "Portefeuille Numérique Intelligent",
                 imageRes = R.drawable.img_guide_balances,
-                badges = listOf("USD ($)", "CDF (FC)", "En direct ⚡"),
-                description = "Consultez vos balances en direct avec mise à jour instantanée à chaque transaction. Basculez en un clic entre Franc Congolais et Dollar US au meilleur taux garanti.",
+                badges = listOf("USD ($)", "EUR (€)", "Devise Locale"),
+                description = "Consultez vos balances en direct avec mise à jour instantanée à chaque transaction. Basculez en un clic entre le Dollar US ($), l'Euro (€) et votre Devise Nationale au meilleur taux garanti.",
                 highlights = listOf(
                     "Actualisation dynamique" to "Le solde réagit immédiatement à chaque crédit et débit.",
-                    "Gestion multi-comptes" to "Gardez vos avoirs en USD et CDF sous le même portefeuille sécurisé.",
+                    "Gestion multi-comptes" to "Gardez vos avoirs en Dollar US ($), Euro (€) et Devise Locale sous le même portefeuille sécurisé.",
                     "Visibilité & Confidentialité" to "Masquez ou affichez votre solde d'un simple geste."
                 )
             ),
@@ -126,7 +126,7 @@ fun InstallationGuideScreen(
                 title = "Scanner & Payer en Supermarché",
                 subtitle = "Paiement Instantané par QR Code",
                 imageRes = R.drawable.img_guide_supermarket,
-                badges = listOf("Supermarché 🛒", "Sans Contact 📱", "Zéro Commission"),
+                badges = listOf("Supermarché", "Sans Contact", "Zéro Commission"),
                 description = "Faites vos courses l'esprit tranquille. Notre scanner intégré haute performance vous permet de scanner le QR code à la caisse de vos supermarchés et boutiques partenaires pour régler vos achats instantanément.",
                 highlights = listOf(
                     "Rapidité absolue" to "Ouvrez, scannez, validez avec votre PIN et c'est payé en 2 secondes.",
@@ -269,7 +269,7 @@ fun InstallationGuideScreen(
                                 fontFamily = MulishFontFamily,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 11.5.sp,
-                                color = BrandOrangeLight,
+                                color = BrandCyan,
                                 letterSpacing = 1.5.sp,
                                 textAlign = TextAlign.Center
                             )
@@ -295,7 +295,7 @@ fun InstallationGuideScreen(
                             ) {
                                 step.badges.forEach { badge ->
                                     Surface(
-                                        color = BrandOrange.copy(alpha = 0.85f),
+                                        color = BrandPurple.copy(alpha = 0.9f),
                                         shape = RoundedCornerShape(6.dp)
                                     ) {
                                         Text(
@@ -342,13 +342,13 @@ fun InstallationGuideScreen(
                                             modifier = Modifier
                                                 .padding(top = 3.dp)
                                                 .size(16.dp)
-                                                .background(BrandOrange.copy(alpha = 0.2f), CircleShape),
+                                                .background(BrandPurple.copy(alpha = 0.3f), CircleShape),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Check,
                                                 contentDescription = null,
-                                                tint = BrandOrangeLight,
+                                                tint = BrandCyan,
                                                 modifier = Modifier.size(11.dp)
                                             )
                                         }
@@ -385,7 +385,7 @@ fun InstallationGuideScreen(
                                         permissionsLauncher.launch(perms.toTypedArray())
                                     },
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (permissionsRequested) BrandGreen else BrandOrange
+                                        containerColor = if (permissionsRequested) BrandGreen else BrandPurple
                                     ),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
@@ -432,7 +432,7 @@ fun InstallationGuideScreen(
                             modifier = Modifier
                                 .size(if (i == stepIndex) 10.dp else 6.dp)
                                 .clip(CircleShape)
-                                .background(if (i == stepIndex) BrandOrange else Color.White.copy(alpha = 0.4f))
+                                .background(if (i == stepIndex) BrandPurple else Color.White.copy(alpha = 0.4f))
                                 .clickable { stepIndex = i }
                         )
                     }
@@ -474,7 +474,7 @@ fun InstallationGuideScreen(
                                 onFinished()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandPurple),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .weight(if (stepIndex > 0) 0.65f else 1f)

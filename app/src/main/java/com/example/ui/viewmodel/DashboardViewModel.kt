@@ -171,6 +171,16 @@ data class DashboardUiState(
     val activateAgentError: String? = null,
     val activateAgentSuccessMessage: String? = null,
 
+    // --- EXCHANGE / CONVERSION DE DEVISES STATE ---
+    val isExchangeDialogOpen: Boolean = false,
+    val exchangeAmount: String = "",
+    val exchangeFromCurrency: String = "USD",
+    val exchangeToCurrency: String = "CDF",
+    val exchangePin: String = "",
+    val isExchangeLoading: Boolean = false,
+    val exchangeError: String? = null,
+    val exchangeSuccessResponse: com.example.data.model.ExchangeResponse? = null,
+
     val isForgotPinDialogOpen: Boolean = false,
     val forgotPinStep: Int = 1,
     val forgotPinPhone: String = "",
@@ -247,7 +257,32 @@ data class DashboardUiState(
     val currentUserId: Long? = null,
     val transferSearchMode: String = "wallet", // "wallet" or "phone"
     val isSearchingTransferRecipient: Boolean = false,
-    val agentDepositSearchMode: String = "wallet" // "wallet" or "phone"
+    val agentDepositSearchMode: String = "wallet", // "wallet" or "phone"
+
+    // --- DEPOSIT (MaxiCash Gateway: Mobile Money, Card, PayPal) ---
+    val isDepositDialogOpen: Boolean = false,
+    val depositMethod: String = "mobile_money", // "mobile_money", "card", "paypal"
+    val depositAmount: String = "",
+    val depositCurrency: String = "USD",
+    val depositOperator: String = "mpesa",
+    val depositPhoneNumber: String = "",
+    val depositCountryCode: String = "CD",
+    val isDepositLoading: Boolean = false,
+    val depositError: String? = null,
+    val depositSuccessMessage: String? = null,
+    val depositPendingReference: String? = null,
+    val depositPaymentUrl: String? = null,
+    val isDepositWebViewOpen: Boolean = false,
+
+    // Agent External Mobile Money pull
+    val isAgentExternalMoMoOpen: Boolean = false,
+    val agentExternalMoMoOperator: String = "mpesa",
+    val agentExternalMoMoPhone: String = "",
+    val agentExternalMoMoAmount: String = "",
+    val isAgentExternalMoMoLoading: Boolean = false,
+    val agentExternalMoMoError: String? = null,
+    val agentExternalMoMoSuccess: String? = null,
+    val agentExternalMoMoReference: String? = null
 )
 
 class DashboardViewModel(
@@ -3173,6 +3208,393 @@ class DashboardViewModel(
                     it.copy(
                         isAgentLoanRepayLoading = false,
                         agentLoanRepayError = err.message ?: "Erreur de remboursement du prêt."
+                    )
+                }
+            }
+        }
+    }
+
+    // --- EXCHANGE / CONVERSION METHODS ---
+    fun openExchangeDialog(from: String = "USD", to: String = "CDF") {
+        _uiState.update {
+            it.copy(
+                isExchangeDialogOpen = true,
+                exchangeFromCurrency = from,
+                exchangeToCurrency = if (from == to) (if (from == "USD") "CDF" else "USD") else to,
+                exchangeAmount = "",
+                exchangePin = "",
+                exchangeError = null,
+                exchangeSuccessResponse = null
+            )
+        }
+    }
+
+    fun closeExchangeDialog() {
+        _uiState.update {
+            it.copy(
+                isExchangeDialogOpen = false,
+                exchangeError = null,
+                exchangeSuccessResponse = null
+            )
+        }
+    }
+
+    fun setExchangeAmount(amount: String) {
+        val filtered = amount.filter { it.isDigit() || it == '.' }
+        _uiState.update { it.copy(exchangeAmount = filtered, exchangeError = null) }
+    }
+
+    fun setExchangeFromCurrency(currency: String) {
+        _uiState.update {
+            val to = if (it.exchangeToCurrency == currency) {
+                if (currency == "USD") "CDF" else "USD"
+            } else {
+                it.exchangeToCurrency
+            }
+            it.copy(exchangeFromCurrency = currency, exchangeToCurrency = to, exchangeError = null)
+        }
+    }
+
+    fun setExchangeToCurrency(currency: String) {
+        _uiState.update {
+            val from = if (it.exchangeFromCurrency == currency) {
+                if (currency == "USD") "CDF" else "USD"
+            } else {
+                it.exchangeFromCurrency
+            }
+            it.copy(exchangeToCurrency = currency, exchangeFromCurrency = from, exchangeError = null)
+        }
+    }
+
+    fun swapExchangeCurrencies() {
+        _uiState.update {
+            it.copy(
+                exchangeFromCurrency = it.exchangeToCurrency,
+                exchangeToCurrency = it.exchangeFromCurrency,
+                exchangeError = null
+            )
+        }
+    }
+
+    fun setExchangePin(pin: String) {
+        val filtered = pin.filter { it.isDigit() }.take(6)
+        _uiState.update { it.copy(exchangePin = filtered, exchangeError = null) }
+    }
+
+    fun resetExchangeSuccess() {
+        _uiState.update { it.copy(exchangeSuccessResponse = null, exchangeAmount = "", exchangePin = "") }
+    }
+
+    fun submitExchange() {
+        val state = _uiState.value
+        val amount = state.exchangeAmount.toDoubleOrNull() ?: 0.0
+        if (amount <= 0.0) {
+            _uiState.update { it.copy(exchangeError = "Veuillez saisir un montant valide supérieur à 0.") }
+            return
+        }
+        if (state.exchangeFromCurrency == state.exchangeToCurrency) {
+            _uiState.update { it.copy(exchangeError = "Les devises source et de destination doivent être différentes.") }
+            return
+        }
+        if (state.exchangePin.isBlank()) {
+            _uiState.update { it.copy(exchangeError = "Veuillez saisir votre code PIN CashPay.") }
+            return
+        }
+
+        _uiState.update { it.copy(isExchangeLoading = true, exchangeError = null) }
+
+        viewModelScope.launch {
+            val result = repository.exchangeCurrencies(
+                amount = amount,
+                fromCurrency = state.exchangeFromCurrency,
+                toCurrency = state.exchangeToCurrency,
+                pin = state.exchangePin
+            )
+            result.onSuccess { response ->
+                _uiState.update {
+                    it.copy(
+                        isExchangeLoading = false,
+                        exchangeSuccessResponse = response,
+                        exchangeError = null
+                    )
+                }
+                // Refresh balance and transactions automatically
+                val effectiveUserId = getEffectiveUserId()
+                fetchWallet(effectiveUserId)
+                loadTransactions(effectiveUserId)
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isExchangeLoading = false,
+                        exchangeError = err.message ?: "Échec de l'opération de change."
+                    )
+                }
+            }
+        }
+    }
+
+    // --- DEPOSIT METHODS (MaxiCash Gateway) ---
+    fun openDepositDialog(method: String = "mobile_money") {
+        val prof = userProfile.value
+        val userCountry = prof?.country ?: "CD"
+        val operators = com.example.data.model.MobileMoneyOperator.getOperatorsForCountry(userCountry)
+        val defaultOp = operators.firstOrNull()?.code ?: "mpesa"
+        val userPhone = prof?.phone ?: ""
+
+        _uiState.update { current ->
+            current.copy(
+                isDepositDialogOpen = true,
+                depositMethod = method,
+                depositAmount = "",
+                depositCurrency = "USD",
+                depositOperator = defaultOp,
+                depositPhoneNumber = if (current.depositPhoneNumber.isNotBlank()) current.depositPhoneNumber else userPhone,
+                depositCountryCode = userCountry,
+                isDepositLoading = false,
+                depositError = null,
+                depositSuccessMessage = null,
+                depositPendingReference = null,
+                depositPaymentUrl = null,
+                isDepositWebViewOpen = false
+            )
+        }
+    }
+
+    fun closeDepositDialog() {
+        _uiState.update {
+            it.copy(
+                isDepositDialogOpen = false,
+                depositError = null,
+                depositSuccessMessage = null,
+                depositPendingReference = null,
+                depositPaymentUrl = null
+            )
+        }
+    }
+
+    fun setDepositMethod(method: String) {
+        _uiState.update { it.copy(depositMethod = method, depositError = null) }
+    }
+
+    fun setDepositAmount(amount: String) {
+        _uiState.update { it.copy(depositAmount = amount, depositError = null) }
+    }
+
+    fun setDepositOperator(operator: String) {
+        _uiState.update { it.copy(depositOperator = operator, depositError = null) }
+    }
+
+    fun setDepositPhoneNumber(phone: String) {
+        _uiState.update { it.copy(depositPhoneNumber = phone, depositError = null) }
+    }
+
+    fun setDepositCountryCode(code: String) {
+        _uiState.update { it.copy(depositCountryCode = code) }
+    }
+
+    fun openDepositWebView(url: String) {
+        _uiState.update { it.copy(depositPaymentUrl = url, isDepositWebViewOpen = true) }
+    }
+
+    fun closeDepositWebView() {
+        _uiState.update { it.copy(isDepositWebViewOpen = false, depositPaymentUrl = null) }
+        val effectiveUserId = getEffectiveUserId()
+        fetchWallet(effectiveUserId)
+        loadTransactions(effectiveUserId)
+    }
+
+    fun submitDeposit() {
+        val state = _uiState.value
+        val amount = state.depositAmount.trim().toDoubleOrNull()
+        if (amount == null || amount <= 0.0) {
+            _uiState.update { it.copy(depositError = "Veuillez entrer un montant valide supérieur à 0.") }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isDepositLoading = true,
+                depositError = null,
+                depositSuccessMessage = null,
+                depositPendingReference = null
+            )
+        }
+
+        viewModelScope.launch {
+            when (state.depositMethod) {
+                "mobile_money" -> {
+                    if (state.depositPhoneNumber.isBlank()) {
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositError = "Veuillez saisir votre numéro de téléphone Mobile Money."
+                            )
+                        }
+                        return@launch
+                    }
+                    val result = repository.depositMobileMoney(
+                        amount = amount,
+                        currency = state.depositCurrency,
+                        operator = state.depositOperator,
+                        phoneNumber = state.depositPhoneNumber.trim(),
+                        countryCode = state.depositCountryCode
+                    )
+                    result.onSuccess { resp ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositPendingReference = resp.reference,
+                                depositSuccessMessage = resp.message ?: "Demande de dépôt envoyée. Veuillez confirmer le paiement sur votre téléphone.",
+                                depositError = null
+                            )
+                        }
+                        val effectiveUserId = getEffectiveUserId()
+                        fetchWallet(effectiveUserId)
+                        loadTransactions(effectiveUserId)
+                    }.onFailure { err ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositError = err.message ?: "Échec de la demande de dépôt Mobile Money."
+                            )
+                        }
+                    }
+                }
+                "card" -> {
+                    val result = repository.depositCard(
+                        amount = amount,
+                        currency = state.depositCurrency
+                    )
+                    result.onSuccess { resp ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositPendingReference = resp.reference,
+                                depositPaymentUrl = resp.paymentUrl,
+                                isDepositWebViewOpen = !resp.paymentUrl.isNullOrBlank(),
+                                depositError = null
+                            )
+                        }
+                    }.onFailure { err ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositError = err.message ?: "Impossible d'initialiser le paiement par carte."
+                            )
+                        }
+                    }
+                }
+                "paypal" -> {
+                    val result = repository.depositPayPal(
+                        amount = amount,
+                        currency = state.depositCurrency
+                    )
+                    result.onSuccess { resp ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositPendingReference = resp.reference,
+                                depositPaymentUrl = resp.paymentUrl,
+                                isDepositWebViewOpen = !resp.paymentUrl.isNullOrBlank(),
+                                depositError = null
+                            )
+                        }
+                    }.onFailure { err ->
+                        _uiState.update {
+                            it.copy(
+                                isDepositLoading = false,
+                                depositError = err.message ?: "Impossible d'initialiser le paiement PayPal."
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- AGENT EXTERNAL MOBILE MONEY WITHDRAWAL / PULL ---
+    fun openAgentExternalMoMoDialog() {
+        _uiState.update {
+            it.copy(
+                isAgentExternalMoMoOpen = true,
+                agentExternalMoMoOperator = "mpesa",
+                agentExternalMoMoPhone = "",
+                agentExternalMoMoAmount = "",
+                isAgentExternalMoMoLoading = false,
+                agentExternalMoMoError = null,
+                agentExternalMoMoSuccess = null,
+                agentExternalMoMoReference = null
+            )
+        }
+    }
+
+    fun closeAgentExternalMoMoDialog() {
+        _uiState.update {
+            it.copy(
+                isAgentExternalMoMoOpen = false,
+                agentExternalMoMoError = null,
+                agentExternalMoMoSuccess = null
+            )
+        }
+    }
+
+    fun setAgentExternalMoMoOperator(op: String) {
+        _uiState.update { it.copy(agentExternalMoMoOperator = op, agentExternalMoMoError = null) }
+    }
+
+    fun setAgentExternalMoMoPhone(phone: String) {
+        _uiState.update { it.copy(agentExternalMoMoPhone = phone, agentExternalMoMoError = null) }
+    }
+
+    fun setAgentExternalMoMoAmount(amt: String) {
+        _uiState.update { it.copy(agentExternalMoMoAmount = amt, agentExternalMoMoError = null) }
+    }
+
+    fun submitAgentExternalMoMo() {
+        val state = _uiState.value
+        val amount = state.agentExternalMoMoAmount.trim().toDoubleOrNull()
+        if (amount == null || amount <= 0.0) {
+            _uiState.update { it.copy(agentExternalMoMoError = "Veuillez saisir un montant valide.") }
+            return
+        }
+        if (state.agentExternalMoMoPhone.isBlank()) {
+            _uiState.update { it.copy(agentExternalMoMoError = "Veuillez saisir le numéro Mobile Money du client.") }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isAgentExternalMoMoLoading = true,
+                agentExternalMoMoError = null,
+                agentExternalMoMoSuccess = null
+            )
+        }
+
+        viewModelScope.launch {
+            val result = repository.depositMobileMoney(
+                amount = amount,
+                currency = "USD",
+                operator = state.agentExternalMoMoOperator,
+                phoneNumber = state.agentExternalMoMoPhone.trim(),
+                countryCode = "CD"
+            )
+            result.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isAgentExternalMoMoLoading = false,
+                        agentExternalMoMoReference = resp.reference,
+                        agentExternalMoMoSuccess = "Demande envoyée au client (${resp.reference ?: "DP"}). Dès validation par le client sur son téléphone, vos fonds seront crédités et vous pourrez remettre les espèces.",
+                        agentExternalMoMoError = null
+                    )
+                }
+                val effectiveUserId = getEffectiveUserId()
+                fetchWallet(effectiveUserId)
+                loadTransactions(effectiveUserId)
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentExternalMoMoLoading = false,
+                        agentExternalMoMoError = err.message ?: "Échec de l'initiation du retrait Mobile Money."
                     )
                 }
             }

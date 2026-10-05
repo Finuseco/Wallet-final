@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
@@ -119,6 +120,8 @@ import com.example.ui.viewmodel.AuthUiState
 import com.example.ui.viewmodel.AuthViewModel
 import java.io.ByteArrayOutputStream
 
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.components.CameraCaptureMode
 import com.example.ui.components.CashPayCameraCaptureDialog
 import androidx.compose.ui.input.pointer.pointerInput
@@ -269,6 +272,122 @@ fun RegisterAccountScreen(
             content = info,
             onDismiss = { activeInfo = null }
         )
+    }
+
+    // BIG CENTER POP-UP DIALOG FOR EXISTING ACCOUNTS (ONCHAT RED PROHIBITION DESIGN)
+    val existingAccModalMsg = uiState.existingAccountErrorModalMessage
+    if (!existingAccModalMsg.isNullOrBlank()) {
+        Dialog(
+            onDismissRequest = { viewModel.clearExistingAccountErrorModal() },
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .clip(RoundedCornerShape(24.dp)),
+                color = Color(0xFF0B0F19), // OnChat dark navy background
+                shadowElevation = 24.dp,
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFEF4444))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape)
+                            .border(1.5.dp, Color(0xFFEF4444), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Block,
+                            contentDescription = "Inscription Interdite",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(38.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Inscription Interdite",
+                        color = Color(0xFFEF4444),
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Compte Déjà Existant !",
+                        color = Color.White,
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        color = Color(0xFF7F1D1D).copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = existingAccModalMsg,
+                            color = Color(0xFFFECACA),
+                            fontFamily = MulishFontFamily,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(14.dp),
+                            lineHeight = 18.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.clearExistingAccountErrorModal()
+                            viewModel.navigateToLoginWithPhone(uiState.fullPhone)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ToofanGreen),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Se Connecter avec ce Numéro",
+                            color = Color.White,
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = { viewModel.clearExistingAccountErrorModal() }
+                    ) {
+                        Text(
+                            text = "Modifier le numéro de téléphone",
+                            color = Color(0xFF94A3B8),
+                            fontFamily = MulishFontFamily,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // If Registration Successful -> Display Official Success Screen

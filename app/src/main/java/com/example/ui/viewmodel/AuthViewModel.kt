@@ -83,6 +83,9 @@ data class AuthUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
 
+    // Modal popup state for existing accounts or critical validation errors
+    val existingAccountErrorModalMessage: String? = null,
+
     // --- FORGOT PIN STATE ---
     val isForgotPinOpen: Boolean = false,
     val forgotPinStep: Int = 1,
@@ -557,25 +560,60 @@ class AuthViewModel(
         }
     }
 
+    fun clearPhoneOtpError() {
+        _uiState.update { it.copy(phoneOtpError = null) }
+    }
+
+    fun clearExistingAccountErrorModal() {
+        _uiState.update { it.copy(existingAccountErrorModalMessage = null) }
+    }
+
+    fun navigateToLoginWithPhone(phone: String = "") {
+        _uiState.update { current ->
+            var local = current.localPhone
+            if (phone.isNotBlank()) {
+                val digits = phone.filter { it.isDigit() }
+                if (digits.length >= 9) {
+                    local = digits.takeLast(9)
+                }
+            }
+            current.copy(
+                authStep = AuthStep.IDENTIFICATION,
+                authMethod = AuthMethod.PHONE,
+                localPhone = local,
+                existingAccountErrorModalMessage = null,
+                errorMessage = null
+            )
+        }
+    }
+
     fun sendRegisterPhoneOtp(phone: String, accountType: String = "national", channel: String = "sms") {
         if (phone.isBlank()) return
-        _uiState.update { it.copy(isPhoneOtpSending = true, phoneOtpError = null, phoneOtpSuccess = null) }
+        _uiState.update { it.copy(isPhoneOtpSending = true, phoneOtpError = null, phoneOtpSuccess = null, existingAccountErrorModalMessage = null) }
         viewModelScope.launch {
-            val res = repository.registerSendPhoneOtp(phone.trim(), accountType)
+            val res = repository.registerSendPhoneOtp(phone.trim(), accountType, channel)
             res.onSuccess { resp ->
                 val channelLabel = if (channel.lowercase() == "whatsapp") "WhatsApp" else "SMS"
                 _uiState.update {
                     it.copy(
                         isPhoneOtpSending = false,
                         phoneOtpSuccess = resp.message ?: "Code OTP envoyé avec succès via $channelLabel.",
-                        phoneOtpError = null
+                        phoneOtpError = null,
+                        existingAccountErrorModalMessage = null
                     )
                 }
             }.onFailure { err ->
+                val errMsg = err.message ?: "Échec d'envoi du code OTP au numéro de téléphone."
+                val isAlreadyRegistered = errMsg.contains("existe", ignoreCase = true) ||
+                                         errMsg.contains("déjà", ignoreCase = true) ||
+                                         errMsg.contains("already", ignoreCase = true) ||
+                                         errMsg.contains("associé", ignoreCase = true) ||
+                                         errMsg.contains("compte", ignoreCase = true)
                 _uiState.update {
                     it.copy(
                         isPhoneOtpSending = false,
-                        phoneOtpError = err.message ?: "Échec d'envoi du code OTP au numéro de téléphone."
+                        phoneOtpError = errMsg,
+                        existingAccountErrorModalMessage = if (isAlreadyRegistered) errMsg else null
                     )
                 }
             }

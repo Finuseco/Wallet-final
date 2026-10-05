@@ -207,6 +207,7 @@ data class RegisterRequest(
     @Json(name = "countryCode") val countryCode: String? = null,
     @Json(name = "country") val country: String? = null,
     @Json(name = "account_type") val accountType: String? = null,
+    @Json(name = "preferred_otp_channel") val preferredOtpChannel: String? = null,
     @Json(name = "language") val language: String? = "fr",
     @Json(name = "company_name") val companyName: String? = null,
     @Json(name = "first_name") val firstName: String? = null,
