@@ -38,6 +38,23 @@ class CashPayRepository(
     private val dao: CashPayDao
 ) {
 
+    init {
+        com.example.data.remote.ApiClient.tokenProvider = {
+            kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                dao.getSessionOnce()?.sessionToken
+            }
+        }
+    }
+
+    private suspend fun ensureSessionToken() {
+        if (com.example.data.remote.ApiClient.sessionToken.isNullOrBlank()) {
+            val sess = dao.getSessionOnce()
+            if (sess != null && !sess.sessionToken.isNullOrBlank()) {
+                com.example.data.remote.ApiClient.sessionToken = sess.sessionToken
+            }
+        }
+    }
+
     private fun sanitizeUserError(rawMsg: String?, fallback: String): String {
         if (rawMsg.isNullOrBlank()) return fallback
         val clean = rawMsg.trim()
@@ -258,12 +275,12 @@ class CashPayRepository(
         return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
     }
 
-    suspend fun registerSendPhoneOtp(phone: String): Result<RegisterResponse> {
-        return register(RegisterRequest(action = "send_phone_otp", phone = phone))
+    suspend fun registerSendPhoneOtp(phone: String, accountType: String = "national"): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "start", phone = phone, accountType = accountType.lowercase()))
     }
 
-    suspend fun registerVerifyPhoneOtp(phone: String, otp: String): Result<RegisterResponse> {
-        return register(RegisterRequest(action = "verify_phone_otp", phone = phone, otp = otp))
+    suspend fun registerVerifyPhoneOtp(phone: String, countryCode: String = "CD", country: String = "République démocratique du Congo", otp: String = ""): Result<RegisterResponse> {
+        return register(RegisterRequest(action = "verify_phone", phone = phone, countryCode = countryCode, country = country))
     }
 
     suspend fun registerSendEmailOtp(email: String): Result<RegisterResponse> {
@@ -1358,6 +1375,183 @@ class CashPayRepository(
                 Result.success(response.body()!!)
             } else {
                 val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors de l'opération de retrait")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // --- SHOPPING AGENT REPOSITORY METHODS ---
+
+    suspend fun getShoppingProducts(): Result<com.example.data.model.ShoppingContextResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getShoppingProducts()
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de charger les produits Shopping.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun publishProduct(request: com.example.data.model.PublishProductRequest): Result<com.example.data.model.ProductResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.publishProduct(request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Erreur lors de la publication du produit.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getProduct(productId: String): Result<com.example.data.model.ProductResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getProduct(productId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Produit introuvable.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateProduct(productId: String, request: com.example.data.model.PublishProductRequest): Result<com.example.data.model.ProductResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.updateProduct(productId, request)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de modifier le produit.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteProduct(productId: String): Result<com.example.data.model.GenericShoppingResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.deleteProduct(productId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de supprimer le produit.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getProductReference(productId: String): Result<com.example.data.model.ProductReferenceResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getProductReference(productId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de récupérer la référence.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getShoppingBoutiques(): Result<com.example.data.model.BoutiquesResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getShoppingBoutiques()
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de récupérer vos boutiques.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createBoutique(name: String, address: String, whatsappNumber: String): Result<com.example.data.model.BoutiqueResponse> {
+        return try {
+            ensureSessionToken()
+            val req = com.example.data.model.CreateBoutiqueRequest(
+                name = name,
+                address = address,
+                whatsappPublicNumber = whatsappNumber
+            )
+            val response = apiService.createBoutique(req)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de créer la boutique.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBoutique(boutiqueId: String): Result<com.example.data.model.BoutiqueResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getBoutique(boutiqueId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Boutique introuvable.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateBoutique(boutiqueId: String, name: String, address: String, whatsappNumber: String): Result<com.example.data.model.BoutiqueResponse> {
+        return try {
+            ensureSessionToken()
+            val req = com.example.data.model.CreateBoutiqueRequest(
+                name = name,
+                address = address,
+                whatsappPublicNumber = whatsappNumber
+            )
+            val response = apiService.updateBoutique(boutiqueId, req)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de modifier la boutique.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteBoutique(boutiqueId: String): Result<com.example.data.model.GenericShoppingResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.deleteBoutique(boutiqueId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de supprimer la boutique.")
                 Result.failure(Exception(msg))
             }
         } catch (e: Exception) {

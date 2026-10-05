@@ -557,16 +557,17 @@ class AuthViewModel(
         }
     }
 
-    fun sendRegisterPhoneOtp(phone: String) {
+    fun sendRegisterPhoneOtp(phone: String, accountType: String = "national", channel: String = "sms") {
         if (phone.isBlank()) return
         _uiState.update { it.copy(isPhoneOtpSending = true, phoneOtpError = null, phoneOtpSuccess = null) }
         viewModelScope.launch {
-            val res = repository.registerSendPhoneOtp(phone.trim())
+            val res = repository.registerSendPhoneOtp(phone.trim(), accountType)
             res.onSuccess { resp ->
+                val channelLabel = if (channel.lowercase() == "whatsapp") "WhatsApp" else "SMS"
                 _uiState.update {
                     it.copy(
                         isPhoneOtpSending = false,
-                        phoneOtpSuccess = resp.message ?: "Code OTP SMS envoyé avec succès.",
+                        phoneOtpSuccess = resp.message ?: "Code OTP envoyé avec succès via $channelLabel.",
                         phoneOtpError = null
                     )
                 }
@@ -582,10 +583,15 @@ class AuthViewModel(
     }
 
     fun verifyRegisterPhoneOtp(phone: String, otp: String) {
+        val state = _uiState.value
+        verifyRegisterPhoneOtp(phone, state.selectedCountry.code, state.selectedCountry.name, otp)
+    }
+
+    fun verifyRegisterPhoneOtp(phone: String, countryCode: String, country: String, otp: String) {
         if (phone.isBlank() || otp.isBlank()) return
         _uiState.update { it.copy(isPhoneOtpVerifying = true, phoneOtpError = null) }
         viewModelScope.launch {
-            val res = repository.registerVerifyPhoneOtp(phone.trim(), otp.trim())
+            val res = repository.registerVerifyPhoneOtp(phone.trim(), countryCode, country, otp.trim())
             res.onSuccess {
                 _uiState.update {
                     it.copy(

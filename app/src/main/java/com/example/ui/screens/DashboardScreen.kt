@@ -13,25 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -192,7 +174,7 @@ fun DashboardScreen(
     var showServicesDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = Color(0xFF000E38),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             FloatingCapsuleBottomBar(
@@ -999,11 +981,11 @@ fun CashPayTopHeader(
     height: androidx.compose.ui.unit.Dp = 240.dp,
     onBackClick: (() -> Unit)? = null
 ) {
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = height)
-            .wrapContentHeight()
+            .height(height + statusBarHeight)
             .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
             .background(
                 Brush.verticalGradient(
@@ -1019,7 +1001,7 @@ fun CashPayTopHeader(
         Box(
             modifier = Modifier
                 .size(170.dp)
-                .offset(x = (-30).dp, y = (-20).dp)
+                .offset(x = (-30).dp, y = (-20).dp + statusBarHeight)
                 .clip(CircleShape)
                 .background(Color(0xFF00E5FF).copy(alpha = 0.16f))
         )
@@ -1027,7 +1009,7 @@ fun CashPayTopHeader(
             modifier = Modifier
                 .size(200.dp)
                 .align(Alignment.TopEnd)
-                .offset(x = 60.dp, y = (-30).dp)
+                .offset(x = 60.dp, y = (-30).dp + statusBarHeight)
                 .clip(CircleShape)
                 .background(Color(0xFFFF6600).copy(alpha = 0.20f))
         )
@@ -1035,7 +1017,7 @@ fun CashPayTopHeader(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .padding(top = statusBarHeight)
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             Row(
@@ -1302,26 +1284,31 @@ private fun ToofanDashboardTab(
         filtered.take(5)
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 100.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ToofanBgColor)
     ) {
-        // Top Bar Header with Overlapping Balance Cards Carousel
-        item {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                CashPayTopHeader(
-                    userProfile = userProfile,
-                    unreadNotifCount = unreadNotifCount,
-                    onNotificationClick = { dashboardViewModel.openNotificationDialog() },
-                    onSettingsClick = onSettingsClick
-                )
+        // Pinned Top Bar Header: Anchored at the top, perfectly covers status bar, never scrolls away, zero white space
+        CashPayTopHeader(
+            userProfile = userProfile,
+            unreadNotifCount = unreadNotifCount,
+            onNotificationClick = { dashboardViewModel.openNotificationDialog() },
+            onSettingsClick = onSettingsClick,
+            height = 85.dp
+        )
 
-                // Balance Cards mounted directly overlapping the header at top = 165.dp
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+        ) {
+            // Balance Cards Carousel
+            item {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 165.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     HorizontalPager(
                         state = pagerState,
@@ -1831,7 +1818,6 @@ private fun ToofanDashboardTab(
                     }
                 }
             }
-        }
 
         // Action Buttons: Agent (if role agent), Retrait, Crédit, Transfer, Payment, Services
         val isAgentUser = userProfile?.role?.lowercase()?.trim() == "agent"
@@ -2311,6 +2297,7 @@ private fun ToofanDashboardTab(
             Spacer(modifier = Modifier.height(20.dp))
         }
     }
+    }
 }
 
 @Composable
@@ -2751,26 +2738,31 @@ private fun ToofanHistoryTab(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 100.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ToofanBgColor)
     ) {
-        item {
-            CashPayTopHeader(
-                userProfile = userProfile,
-                unreadNotifCount = unreadNotifCount,
-                onNotificationClick = { dashboardViewModel.openNotificationDialog() },
-                onSettingsClick = { dashboardViewModel.setSelectedTab(2) },
-                height = 140.dp
-            )
-        }
+        CashPayTopHeader(
+            userProfile = userProfile,
+            unreadNotifCount = unreadNotifCount,
+            onNotificationClick = { dashboardViewModel.openNotificationDialog() },
+            onSettingsClick = { dashboardViewModel.setSelectedTab(2) },
+            height = 85.dp
+        )
 
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+        ) {
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -2851,6 +2843,7 @@ private fun ToofanHistoryTab(
                 }
             }
         }
+    }
     }
 }
 
@@ -3090,23 +3083,28 @@ private fun ToofanProfileTab(
 ) {
     val unreadNotifCount = remember(notifications) { notifications.count { !it.read } }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(bottom = 100.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ToofanBgColor)
     ) {
-        item {
-            CashPayTopHeader(
-                userProfile = userProfile,
-                unreadNotifCount = unreadNotifCount,
-                onNotificationClick = { dashboardViewModel.openNotificationDialog() },
-                onSettingsClick = onNavigateSecurity,
-                height = 140.dp
-            )
-        }
+        CashPayTopHeader(
+            userProfile = userProfile,
+            unreadNotifCount = unreadNotifCount,
+            onNotificationClick = { dashboardViewModel.openNotificationDialog() },
+            onSettingsClick = onNavigateSecurity,
+            height = 85.dp
+        )
 
-        item {
-            // Profile Header Card with Avatar & Edit Action
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 10.dp, bottom = 100.dp)
+        ) {
+            item {
+                // Profile Header Card with Avatar & Edit Action
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3278,6 +3276,7 @@ private fun ToofanProfileTab(
         item {
             Spacer(modifier = Modifier.height(20.dp))
         }
+    }
     }
 }
 
@@ -6311,6 +6310,9 @@ private fun ActionPlusTile(
 }
 
 private fun readAndSyncPhoneContacts(context: Context, dashboardViewModel: DashboardViewModel) {
+    if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        return
+    }
     try {
         val resolver = context.contentResolver
         // Map to store phone -> name, deduplicating by normalized digit key

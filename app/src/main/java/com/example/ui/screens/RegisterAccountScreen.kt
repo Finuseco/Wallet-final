@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,18 +38,23 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -59,13 +66,14 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -79,37 +87,57 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.ui.components.CameraCaptureMode
-import com.example.ui.components.CashPayCameraCaptureDialog
 import com.example.ui.components.CountryPickerBottomSheet
+import com.example.ui.components.ToofanButton
+import com.example.ui.components.ToofanInputField
 import com.example.ui.theme.MulishFontFamily
+import com.example.ui.theme.ToofanBgColor
+import com.example.ui.theme.ToofanBodyText
+import com.example.ui.theme.ToofanGreen
+import com.example.ui.theme.ToofanGrey1
+import com.example.ui.theme.ToofanMainDark
+import com.example.ui.theme.ToofanWhite
 import com.example.ui.viewmodel.AuthStep
 import com.example.ui.viewmodel.AuthUiState
 import com.example.ui.viewmodel.AuthViewModel
 import java.io.ByteArrayOutputStream
 
-// Brand Colors
-private val BrandBlueMidnight = Color(0xFF000E38)
-private val BrandBlueDark = Color(0xFF0A1C4D)
-private val BrandOrange = Color(0xFFFF6600)
-private val BrandOrangeLight = Color(0xFFFF8533)
-private val BrandBgGray = Color(0xFFF4F6F9)
-private val BrandGreen = Color(0xFF00C853)
+import com.example.ui.components.CameraCaptureMode
+import com.example.ui.components.CashPayCameraCaptureDialog
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerInputChange
 
-data class SelectOption(val key: String, val label: String)
+private val BrandOrange = Color(0xFFF97316)
+private val BrandOrangeLight = Color(0xFFFB923C)
+private val BrandGreen = Color(0xFF10B981)
+private val BrandBlueMidnight = Color(0xFF0F1E3D)
+private val BrandBlueDark = Color(0xFF070F22)
+
+private data class SelectOption(val key: String, val label: String)
+
+private data class InfoContent(
+    val title: String,
+    val role: String,
+    val rules: String = "",
+    val faq: String? = null
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,34 +146,41 @@ fun RegisterAccountScreen(
     uiState: AuthUiState,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
     val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var regStep by remember { mutableIntStateOf(0) } // 0: Phone & Type, 1: Identity, 2: Address & Email, 3: ID Doc, 4: Selfie, 5: Signature & Summary
+    // Active multi-step wizard step (0 to 4 => 5 steps total)
+    var regStep by remember { mutableIntStateOf(0) }
 
-    // Form fields
+    // Info dialog state
+    var activeInfo by remember { mutableStateOf<InfoContent?>(null) }
+
+    // Channel selection for OTP (SMS or WhatsApp only)
+    var selectedOtpChannel by remember { mutableStateOf("sms") }
+
+    // Step Form Fields
     var accountType by remember { mutableStateOf("national") }
-    var language by remember { mutableStateOf("fr") }
     var companyName by remember { mutableStateOf("") }
+    var phoneOtpInput by remember { mutableStateOf("") }
+    var language by remember { mutableStateOf("fr") }
+
     var firstName by remember { mutableStateOf("") }
     var middleName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("male") }
-    var birthDate by remember { mutableStateOf("1995-05-20") }
+    var birthDate by remember { mutableStateOf("") }
     var maritalStatus by remember { mutableStateOf("single") }
     var nationality by remember { mutableStateOf(uiState.selectedCountry.code) }
-    var city by remember { mutableStateOf("Kinshasa") }
-    var address by remember { mutableStateOf("") }
     var profession by remember { mutableStateOf("") }
+    var emailOptional by remember { mutableStateOf("") }
 
-    // Phone & Email OTP states
-    var phoneOtpInput by remember { mutableStateOf("") }
-    var emailOtpInput by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
 
-    // ID Document
     var idType by remember { mutableStateOf("carte_identite") }
     var idNumber by remember { mutableStateOf("") }
+
+    var pinCode by remember { mutableStateOf("") }
+    var pinConfirm by remember { mutableStateOf("") }
 
     // Camera captures
     var activeCameraMode by remember { mutableStateOf<CameraCaptureMode?>(null) }
@@ -212,7 +247,7 @@ fun RegisterAccountScreen(
         )
     }
 
-    // Country Picker Sheet
+    // Country Picker Sheet (Exact same as Login)
     if (uiState.isCountryPickerOpen) {
         CountryPickerBottomSheet(
             sheetState = bottomSheetState,
@@ -225,6 +260,14 @@ fun RegisterAccountScreen(
                 nationality = it.code
             },
             onDismissRequest = { viewModel.setCountryPickerOpen(false) }
+        )
+    }
+
+    // Helpful Field Info Dialog
+    activeInfo?.let { info ->
+        FieldInfoDialog(
+            content = info,
+            onDismiss = { activeInfo = null }
         )
     }
 
@@ -242,1122 +285,1302 @@ fun RegisterAccountScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(BrandBgGray)
-            .navigationBarsPadding()
+            .background(ToofanBgColor)
     ) {
+        // Full screen vivid background with professional contrast
+        Image(
+            painter = painterResource(id = R.drawable.fintech_bg_person_1790609860029),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            alpha = 0.45f
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xDD070F22),
+                            Color(0xBB0F1E3D),
+                            Color(0xEE050B17)
+                        )
+                    )
+                )
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header - extends to the absolute top of screen into the status bar area
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(BrandBlueMidnight, BrandBlueDark)
-                        )
-                    )
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            // Header Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                IconButton(
+                    onClick = {
+                        if (regStep > 0) regStep-- else viewModel.navigateBack()
+                    }
                 ) {
-                    IconButton(
-                        onClick = {
-                            if (regStep > 0) regStep-- else viewModel.navigateBack()
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Retour",
-                            tint = Color.White
-                        )
-                    }
-
-                    Image(
-                        painter = painterResource(id = R.drawable.cashpay_logo_white),
-                        contentDescription = "CashPay Logo",
-                        modifier = Modifier.height(30.dp)
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Retour",
+                        tint = Color.White
                     )
-
-                    Surface(
-                        color = BrandOrange.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BrandOrange.copy(alpha = 0.4f))
-                    ) {
-                        Text(
-                            text = "Étape ${regStep + 1} / 6",
-                            fontFamily = MulishFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = BrandOrangeLight,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.cashpay_logo_white),
+                    contentDescription = "CashPay Logo",
+                    modifier = Modifier.height(44.dp)
+                )
 
-                // Progress indicators
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Surface(
+                    color = ToofanGreen.copy(alpha = 0.20f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ToofanGreen.copy(alpha = 0.5f))
                 ) {
-                    for (i in 0..5) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    when {
-                                        i == regStep -> BrandOrange
-                                        i < regStep -> BrandOrange.copy(alpha = 0.6f)
-                                        else -> Color.White.copy(alpha = 0.2f)
-                                    }
-                                )
-                        )
-                    }
+                    Text(
+                        text = "Étape ${regStep + 1} / 5",
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = ToofanGreen,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
                 }
             }
 
-            // Main Content Body
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Step Progress Indicator Bars (5 Steps)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Error banner
-                uiState.errorMessage?.let { errorMsg ->
-                    Surface(
-                        color = Color(0xFFFFEBEE),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF5350)),
+                for (i in 0..4) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 14.dp)
-                    ) {
-                        Text(
-                            text = errorMsg,
-                            fontFamily = MulishFontFamily,
-                            fontSize = 13.sp,
-                            color = Color(0xFFC62828),
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                when {
+                                    i == regStep -> ToofanGreen
+                                    i < regStep -> ToofanGreen.copy(alpha = 0.5f)
+                                    else -> Color.White.copy(alpha = 0.2f)
+                                }
+                            )
+                    )
                 }
+            }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Error banner if any
+            uiState.errorMessage?.let { errorMsg ->
+                Surface(
+                    color = Color(0xFFFFEBEE),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF5350)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
-                    ) {
-                        when (regStep) {
+                    Text(
+                        text = errorMsg,
+                        fontFamily = MulishFontFamily,
+                        fontSize = 13.sp,
+                        color = Color(0xFFC62828),
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            // Main White Card in Exact Toofan Design
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                color = ToofanWhite,
+                shadowElevation = 4.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(22.dp)
+                ) {
+                    AnimatedContent(
+                        targetState = regStep,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "reg_step_content"
+                    ) { targetStep ->
+                        when (targetStep) {
                             0 -> {
-                                // Step 1: Type de Compte & Numéro avec Verification OTP
-                                Text(
-                                    text = "1. Numéro de Téléphone & OTP",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Vérifiez d'abord votre numéro pour autoriser votre pays et débloquer la suite :",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    AccountTypeOption("National", "national", accountType, modifier = Modifier.weight(1f)) { accountType = it }
-                                    AccountTypeOption("Diaspora", "diaspora", accountType, modifier = Modifier.weight(1f)) { accountType = it }
-                                    AccountTypeOption("Business", "business", accountType, modifier = Modifier.weight(1f)) { accountType = it }
-                                }
-
-                                if (accountType == "business") {
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    OutlinedTextField(
-                                        value = companyName,
-                                        onValueChange = { companyName = it },
-                                        label = { Text("Nom légal de l'entreprise *") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(12.dp)
+                                // STEP 1: Type de compte, Pays, Téléphone et Vérification OTP (SMS / WhatsApp)
+                                Column {
+                                    Text(
+                                        text = "1. Numéro de Téléphone & OTP",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = ToofanMainDark
                                     )
-                                }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Text(
-                                    text = "Numéro de téléphone portable *",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Surface(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(12.dp))
-                                            .clickable { viewModel.setCountryPickerOpen(true) }
-                                            .testTag("register_country_picker_button"),
-                                        color = Color(0xFFF8FAFC)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Text(text = uiState.selectedCountry.flagEmoji, fontSize = 18.sp)
-                                            Text(
-                                                text = uiState.selectedCountry.dialCode,
-                                                fontFamily = MulishFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = BrandBlueMidnight
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowDropDown,
-                                                contentDescription = "Pays",
-                                                tint = Color(0xFF64748B),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    OutlinedTextField(
-                                        value = uiState.localPhone,
-                                        onValueChange = { viewModel.onLocalPhoneChanged(it) },
-                                        label = { Text("Numéro mobile") },
-                                        placeholder = { Text("810000000") },
-                                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = BrandOrange) },
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(12.dp)
+                                    Text(
+                                        text = "Vérifiez d'abord votre numéro pour autoriser votre pays et débloquer la suite :",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 13.sp,
+                                        color = ToofanBodyText,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
                                     )
-                                }
 
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                // OTP Send & Verification for Phone
-                                Surface(
-                                    color = if (uiState.isPhoneVerified) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        1.dp,
-                                        if (uiState.isPhoneVerified) BrandGreen else Color(0xFFE2E8F0)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(14.dp)) {
-                                        if (uiState.isPhoneVerified) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
-                                                Text(
-                                                    text = "Numéro de téléphone vérifié par OTP avec succès !",
-                                                    fontFamily = MulishFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp,
-                                                    color = BrandGreen
-                                                )
-                                            }
-                                        } else {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = "Vérification OTP par SMS / WhatsApp",
-                                                        fontFamily = MulishFontFamily,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 13.sp,
-                                                        color = BrandBlueMidnight
-                                                    )
-                                                    Text(
-                                                        text = "Requis pour valider votre pays d'inscription",
-                                                        fontFamily = MulishFontFamily,
-                                                        fontSize = 11.sp,
-                                                        color = Color(0xFF64748B)
-                                                    )
-                                                }
-                                                Button(
-                                                    onClick = { viewModel.sendRegisterPhoneOtp(uiState.fullPhone) },
-                                                    enabled = uiState.isPhoneValid && !uiState.isPhoneOtpSending,
-                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
-                                                    shape = RoundedCornerShape(10.dp)
-                                                ) {
-                                                    if (uiState.isPhoneOtpSending) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                                                    } else {
-                                                        Text("Envoyer OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-
-                                            uiState.phoneOtpSuccess?.let {
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(text = it, fontSize = 12.sp, color = BrandGreen, fontFamily = MulishFontFamily)
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    OutlinedTextField(
-                                                        value = phoneOtpInput,
-                                                        onValueChange = { phoneOtpInput = it },
-                                                        label = { Text("Code OTP à 6 chiffres") },
-                                                        modifier = Modifier.weight(1f),
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        singleLine = true
-                                                    )
-                                                    Button(
-                                                        onClick = { viewModel.verifyRegisterPhoneOtp(uiState.fullPhone, phoneOtpInput) },
-                                                        enabled = phoneOtpInput.isNotBlank() && !uiState.isPhoneOtpVerifying,
-                                                        colors = ButtonDefaults.buttonColors(containerColor = BrandGreen),
-                                                        shape = RoundedCornerShape(10.dp)
-                                                    ) {
-                                                        if (uiState.isPhoneOtpVerifying) {
-                                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                                                        } else {
-                                                            Text("Valider", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            uiState.phoneOtpError?.let {
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(text = it, fontSize = 12.sp, color = Color.Red, fontFamily = MulishFontFamily)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                SelectDropdownField(
-                                    label = "Langue préférée",
-                                    selectedKey = language,
-                                    options = languageOptions,
-                                    onOptionSelected = { language = it }
-                                )
-                            }
-                            1 -> {
-                                // Step 2: Verification Adresse E-mail OTP
-                                Text(
-                                    text = "2. Adresse E-mail & OTP",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Vérifiez votre e-mail pour confirmer que vous êtes bien le propriétaire de ces données :",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                OutlinedTextField(
-                                    value = uiState.rawEmail,
-                                    onValueChange = { viewModel.onRawEmailChanged(it) },
-                                    label = { Text("Adresse e-mail personnelle *") },
-                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandOrange) },
-                                    trailingIcon = {
-                                        if (uiState.isEmailVerified) {
-                                            Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Surface(
-                                    color = if (uiState.isEmailVerified) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        1.dp,
-                                        if (uiState.isEmailVerified) BrandGreen else Color(0xFFE2E8F0)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(14.dp)) {
-                                        if (uiState.isEmailVerified) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = BrandGreen)
-                                                Text(
-                                                    text = "Adresse e-mail vérifiée avec succès !",
-                                                    fontFamily = MulishFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp,
-                                                    color = BrandGreen
-                                                )
-                                            }
-                                        } else {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = "Vérification OTP par E-mail",
-                                                        fontFamily = MulishFontFamily,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 13.sp,
-                                                        color = BrandBlueMidnight
-                                                    )
-                                                    Text(
-                                                        text = "Un code de confirmation sera envoyé",
-                                                        fontFamily = MulishFontFamily,
-                                                        fontSize = 11.sp,
-                                                        color = Color(0xFF64748B)
-                                                    )
-                                                }
-                                                Button(
-                                                    onClick = { viewModel.sendRegisterEmailOtp(uiState.rawEmail) },
-                                                    enabled = uiState.rawEmail.contains("@") && !uiState.isEmailOtpSending,
-                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
-                                                    shape = RoundedCornerShape(10.dp)
-                                                ) {
-                                                    if (uiState.isEmailOtpSending) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                                                    } else {
-                                                        Text("Envoyer OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-
-                                            uiState.emailOtpSuccess?.let {
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(text = it, fontSize = 12.sp, color = BrandGreen, fontFamily = MulishFontFamily)
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    OutlinedTextField(
-                                                        value = emailOtpInput,
-                                                        onValueChange = { emailOtpInput = it },
-                                                        label = { Text("Code OTP e-mail") },
-                                                        modifier = Modifier.weight(1f),
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        singleLine = true
-                                                    )
-                                                    Button(
-                                                        onClick = { viewModel.verifyRegisterEmailOtp(uiState.rawEmail, emailOtpInput) },
-                                                        enabled = emailOtpInput.isNotBlank() && !uiState.isEmailOtpVerifying,
-                                                        colors = ButtonDefaults.buttonColors(containerColor = BrandGreen),
-                                                        shape = RoundedCornerShape(10.dp)
-                                                    ) {
-                                                        if (uiState.isEmailOtpVerifying) {
-                                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                                                        } else {
-                                                            Text("Valider", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            uiState.emailOtpError?.let {
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(text = it, fontSize = 12.sp, color = Color.Red, fontFamily = MulishFontFamily)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            2 -> {
-                                // Step 3: Identité Personnelle
-                                Text(
-                                    text = "3. Identité Personnelle",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                OutlinedTextField(
-                                    value = firstName,
-                                    onValueChange = { firstName = it },
-                                    label = { Text("Prénom *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = middleName,
-                                    onValueChange = { middleName = it },
-                                    label = { Text("Deuxième prénom (Post-nom)") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = lastName,
-                                    onValueChange = { lastName = it },
-                                    label = { Text("Nom de famille *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                SelectDropdownField(
-                                    label = "Sexe *",
-                                    selectedKey = gender,
-                                    options = genderOptions,
-                                    onOptionSelected = { gender = it }
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = birthDate,
-                                    onValueChange = { birthDate = it },
-                                    label = { Text("Date de naissance (AAAA-MM-JJ) *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                SelectDropdownField(
-                                    label = "État civil *",
-                                    selectedKey = maritalStatus,
-                                    options = maritalOptions,
-                                    onOptionSelected = { maritalStatus = it }
-                                )
-                            }
-                            3 -> {
-                                // Step 4: Adresse & Activité
-                                Text(
-                                    text = "4. Adresse & Activité Professionnelle",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                OutlinedTextField(
-                                    value = city,
-                                    onValueChange = { city = it },
-                                    label = { Text("Ville de résidence *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = address,
-                                    onValueChange = { address = it },
-                                    label = { Text("Adresse physique / Quartier / Avenue *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = profession,
-                                    onValueChange = { profession = it },
-                                    label = { Text("Profession / Activité principale *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-                            }
-                            4 -> {
-                                // Step 5: Pièce d'Identité & Détection Anti-Doublon
-                                Text(
-                                    text = "5. Pièce d'Identité & Anti-Doublon",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Détection automatique pour empêcher les doublons de pièce d'identité :",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                SelectDropdownField(
-                                    label = "Type de pièce d'identité *",
-                                    selectedKey = idType,
-                                    options = idTypeOptions,
-                                    onOptionSelected = { idType = it }
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                OutlinedTextField(
-                                    value = idNumber,
-                                    onValueChange = { idNumber = it.trim() },
-                                    label = { Text("Numéro du document d'identité *") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    singleLine = true
-                                )
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                if (idNumber.isNotBlank()) {
-                                    val isDuplicate = idNumber.startsWith("0000") || idNumber == "123456789"
-                                    Surface(
-                                        color = if (isDuplicate) Color(0xFFFFEBEE) else BrandGreen.copy(alpha = 0.08f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            if (isDuplicate) Color(0xFFEF5350) else BrandGreen
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isDuplicate) Icons.Default.Lock else Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = if (isDuplicate) Color(0xFFC62828) else BrandGreen,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Text(
-                                                text = if (isDuplicate)
-                                                    "⚠️ Numéro de pièce déjà enregistré. Veuillez vérifier vos informations pour éviter tout doublon."
-                                                else
-                                                    "✓ Numéro de pièce vérifié (Aucun doublon détecté dans le système).",
-                                                fontFamily = MulishFontFamily,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isDuplicate) Color(0xFFC62828) else BrandGreen
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // Camera capture button for document
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .border(
-                                            1.5.dp,
-                                            if (idFrontBase64 != null) BrandGreen else Color(0xFFCBD5E1),
-                                            RoundedCornerShape(14.dp)
-                                        )
-                                        .clickable { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_FRONT },
-                                    color = if (idFrontBase64 != null) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(44.dp)
-                                                    .background(
-                                                        if (idFrontBase64 != null) BrandGreen.copy(alpha = 0.2f) else BrandOrange.copy(alpha = 0.15f),
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (idFrontBase64 != null) Icons.Default.Check else Icons.Default.CameraAlt,
-                                                    contentDescription = null,
-                                                    tint = if (idFrontBase64 != null) BrandGreen else BrandOrange,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-
-                                            Column {
-                                                Text(
-                                                    text = if (idFrontBase64 != null) "Recto de la pièce capturé ✓" else "Capturer le recto de la pièce *",
-                                                    fontFamily = MulishFontFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 14.sp,
-                                                    color = BrandBlueMidnight
-                                                )
-                                                Text(
-                                                    text = if (idFrontBase64 != null) "Photo optimisée et validée" else "Ouvrir la caméra sécurisée CashPay",
-                                                    fontFamily = MulishFontFamily,
-                                                    fontSize = 12.sp,
-                                                    color = Color(0xFF64748B)
-                                                )
-                                            }
-                                        }
-
-                                        Button(
-                                            onClick = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_FRONT },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (idFrontBase64 != null) BrandGreen else BrandOrange
-                                            ),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) {
-                                            Text(
-                                                text = if (idFrontBase64 != null) "Reprendre" else "Scanner",
-                                                fontFamily = MulishFontFamily,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            4 -> {
-                                // Step 5: Selfie KYC In-App Camera
-                                Text(
-                                    text = "5. Photo de Profil & Selfie KYC",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Prenez un selfie net de face avec un éclairage suffisant.",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.height(20.dp))
-
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .border(
-                                            1.5.dp,
-                                            if (profilePhotoBase64 != null) BrandGreen else Color(0xFFCBD5E1),
-                                            RoundedCornerShape(16.dp)
-                                        )
-                                        .clickable { activeCameraMode = CameraCaptureMode.SELFIE_PROFILE },
-                                    color = if (profilePhotoBase64 != null) BrandGreen.copy(alpha = 0.08f) else Color(0xFFF8FAFC)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(90.dp)
-                                                .background(
-                                                    if (profilePhotoBase64 != null) BrandGreen.copy(alpha = 0.2f) else BrandOrange.copy(alpha = 0.15f),
-                                                    CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = if (profilePhotoBase64 != null) Icons.Default.Check else Icons.Default.Face,
-                                                contentDescription = null,
-                                                tint = if (profilePhotoBase64 != null) BrandGreen else BrandOrange,
-                                                modifier = Modifier.size(46.dp)
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(14.dp))
-
-                                        Text(
-                                            text = if (profilePhotoBase64 != null) "Selfie KYC validé avec succès ✓" else "Prendre votre Selfie KYC",
-                                            fontFamily = MulishFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            color = BrandBlueMidnight
-                                        )
-
-                                        Spacer(modifier = Modifier.height(4.dp))
-
-                                        Text(
-                                            text = "Contrôle de cadrage et netteté en direct",
-                                            fontFamily = MulishFontFamily,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF64748B)
-                                        )
-
-                                        Spacer(modifier = Modifier.height(16.dp))
-
-                                        Button(
-                                            onClick = { activeCameraMode = CameraCaptureMode.SELFIE_PROFILE },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (profilePhotoBase64 != null) BrandGreen else BrandOrange
-                                            ),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ) {
-                                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (profilePhotoBase64 != null) "Reprendre la photo" else "Ouvrir la caméra KYC",
-                                                fontFamily = MulishFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            5 -> {
-                                // Step 6: Signature Tactile & Récapitulatif
-                                Text(
-                                    text = "6. Signature Tactile & Validation",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = BrandBlueMidnight
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Signez directement avec votre doigt dans le cadre ci-dessous :",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                // Interactive Signature Touch Pad
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(14.dp))
-                                        .background(Color(0xFFFAFAFA))
-                                        .padding(12.dp)
-                                ) {
+                                    // Account Type Selector (National, Diaspora, Business)
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        Text(
+                                            text = "Type de compte *",
+                                            fontFamily = MulishFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ToofanMainDark
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                activeInfo = InfoContent(
+                                                    title = "Type de Compte",
+                                                    role = "Définit la portée juridique, les plafonds de transfert et les services adaptés à votre profil.",
+                                                    rules = "National : pour résidents locaux. Diaspora : pour les non-résidents ou expatriés. Business : pour commerces et personnes morales.",
+                                                    faq = "Puis-je changer plus tard ? Oui, vous pouvez faire évoluer votre compte vers Business sur présentation des statuts d'entreprise."
+                                                )
+                                            },
+                                            modifier = Modifier.size(24.dp)
                                         ) {
-                                            Icon(Icons.Default.Draw, contentDescription = null, tint = BrandOrange, modifier = Modifier.size(16.dp))
+                                            Icon(
+                                                imageVector = Icons.Outlined.Info,
+                                                contentDescription = "Info",
+                                                tint = ToofanGreen,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        AccountTypeOption("National", "national", accountType, modifier = Modifier.weight(1f)) { accountType = it }
+                                        AccountTypeOption("Diaspora", "diaspora", accountType, modifier = Modifier.weight(1f)) { accountType = it }
+                                        AccountTypeOption("Business", "business", accountType, modifier = Modifier.weight(1f)) { accountType = it }
+                                    }
+
+                                    if (accountType == "business") {
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Text(
-                                                text = "Zone de signature",
+                                                text = "Nom légal de l'entreprise *",
                                                 fontFamily = MulishFontFamily,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                color = BrandBlueMidnight
+                                                fontSize = 13.sp,
+                                                color = ToofanMainDark
                                             )
-                                        }
-                                        TextButton(
-                                            onClick = {
-                                                signaturePaths.clear()
-                                                currentPath = emptyList()
-                                                signatureBase64 = null
-                                            }
-                                        ) {
-                                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Effacer", fontSize = 12.sp, color = Color(0xFFEF4444), fontFamily = MulishFontFamily)
-                                        }
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(140.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Color.White)
-                                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
-                                            .pointerInput(Unit) {
-                                                detectDragGestures(
-                                                    onDragStart = { offset ->
-                                                        currentPath = listOf(offset)
-                                                    },
-                                                    onDrag = { change, _ ->
-                                                        change.consume()
-                                                        currentPath = currentPath + change.position
-                                                    },
-                                                    onDragEnd = {
-                                                        if (currentPath.isNotEmpty()) {
-                                                            signaturePaths.add(currentPath)
-                                                            currentPath = emptyList()
-
-                                                            // Export signature canvas to Base64 PNG
-                                                            try {
-                                                                val bmp = Bitmap.createBitmap(300, 140, Bitmap.Config.ARGB_8888)
-                                                                val canvas = android.graphics.Canvas(bmp)
-                                                                canvas.drawColor(android.graphics.Color.WHITE)
-                                                                val paint = Paint().apply {
-                                                                    color = android.graphics.Color.parseColor("#000E38")
-                                                                    strokeWidth = 5f
-                                                                    style = Paint.Style.STROKE
-                                                                    strokeCap = Paint.Cap.ROUND
-                                                                    strokeJoin = Paint.Join.ROUND
-                                                                    isAntiAlias = true
-                                                                }
-                                                                signaturePaths.forEach { pList ->
-                                                                    if (pList.size > 1) {
-                                                                        val p = android.graphics.Path()
-                                                                        p.moveTo(pList[0].x, pList[0].y)
-                                                                        for (idx in 1 until pList.size) {
-                                                                            p.lineTo(pList[idx].x, pList[idx].y)
-                                                                        }
-                                                                        canvas.drawPath(p, paint)
-                                                                    }
-                                                                }
-                                                                val stream = ByteArrayOutputStream()
-                                                                bmp.compress(Bitmap.CompressFormat.PNG, 90, stream)
-                                                                val b64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
-                                                                signatureBase64 = "data:image/png;base64,$b64"
-                                                            } catch (e: Exception) {
-                                                                e.printStackTrace()
-                                                            }
-                                                        }
-                                                    }
+                                            IconButton(
+                                                onClick = {
+                                                    activeInfo = InfoContent(
+                                                        title = "Nom de l'Entreprise",
+                                                        role = "Raison sociale exacte qui figurera sur vos factures de paiement et QR Codes marchands.",
+                                                        rules = "Indiquez la raison sociale enregistrée au registre de commerce / RCCM.",
+                                                        faq = "Est-ce visible par les clients ? Oui, lors de chaque paiement ou transfert."
+                                                    )
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Info,
+                                                    contentDescription = "Info",
+                                                    tint = ToofanGreen,
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             }
-                                    ) {
-                                        Canvas(modifier = Modifier.fillMaxSize()) {
-                                            signaturePaths.forEach { pList ->
-                                                if (pList.size > 1) {
-                                                    val path = Path().apply {
-                                                        moveTo(pList[0].x, pList[0].y)
-                                                        for (idx in 1 until pList.size) {
-                                                            lineTo(pList[idx].x, pList[idx].y)
-                                                        }
-                                                    }
-                                                    drawPath(path = path, color = BrandBlueMidnight, style = Stroke(width = 4f))
-                                                }
-                                            }
-                                            if (currentPath.size > 1) {
-                                                val path = Path().apply {
-                                                    moveTo(currentPath[0].x, currentPath[0].y)
-                                                    for (idx in 1 until currentPath.size) {
-                                                        lineTo(currentPath[idx].x, currentPath[idx].y)
-                                                    }
-                                                }
-                                                drawPath(path = path, color = BrandBlueMidnight, style = Stroke(width = 4f))
-                                            }
                                         }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        ToofanInputField(
+                                            value = companyName,
+                                            onValueChange = { companyName = it },
+                                            placeholder = "Ex: FINUSECO SA / Boutique Express",
+                                            testTag = "input_company_name"
+                                        )
+                                    }
 
-                                        if (signaturePaths.isEmpty() && currentPath.isEmpty()) {
-                                            Text(
-                                                text = "Signez ici avec votre doigt",
-                                                fontFamily = MulishFontFamily,
-                                                fontSize = 12.sp,
-                                                color = Color(0xFF94A3B8),
-                                                modifier = Modifier.align(Alignment.Center)
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    // 1. Country Selection (Exact same component as Login)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Pays de résidence *",
+                                            fontFamily = MulishFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ToofanMainDark
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                activeInfo = InfoContent(
+                                                    title = "Sélection du Pays",
+                                                    role = "Définit votre indicatif international et la devise nationale principale rattachée à votre compte.",
+                                                    rules = "Touchez le sélecteur pour choisir parmi tous les pays supportés par CashPay.",
+                                                    faq = "L'indicatif est-il automatiquement ajouté ? Oui, le préfixe téléphonique s'adapte immédiatement."
+                                                )
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Info,
+                                                contentDescription = "Info",
+                                                tint = ToofanGreen,
+                                                modifier = Modifier.size(18.dp)
                                             )
                                         }
                                     }
-                                }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(4.dp))
 
-                                // Summary Card
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp))
-                                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-                                        .padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(52.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .border(1.dp, ToofanGrey1.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
+                                            .clickable { viewModel.setCountryPickerOpen(true) }
+                                            .testTag("register_country_picker_button"),
+                                        color = ToofanWhite
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Text(
+                                                    text = uiState.selectedCountry.flagEmoji,
+                                                    fontSize = 22.sp,
+                                                    modifier = Modifier.padding(end = 10.dp)
+                                                )
+                                                Text(
+                                                    text = uiState.selectedCountry.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontFamily = MulishFontFamily,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = ToofanMainDark,
+                                                    maxLines = 1
+                                                )
+                                            }
+
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = uiState.selectedCountry.dialCode,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontFamily = MulishFontFamily,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ToofanGreen
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.Default.ArrowDropDown,
+                                                    contentDescription = "Sélectionner",
+                                                    tint = ToofanBodyText
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    // 2. Phone Number Input (Exact same component as Login)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Numéro de téléphone portable *",
+                                            fontFamily = MulishFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ToofanMainDark
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                activeInfo = InfoContent(
+                                                    title = "Numéro de Téléphone",
+                                                    role = "Votre identifiant de portefeuille principal CashPay pour recevoir de l'argent et autoriser vos transactions.",
+                                                    rules = "Saisissez les 9 chiffres de votre numéro sans le zéro initial (ex: 812345678).",
+                                                    faq = "Pourquoi vérifier par OTP ? Pour garantir que vous êtes le détenteur légitime de la carte SIM."
+                                                )
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Info,
+                                                contentDescription = "Info",
+                                                tint = ToofanGreen,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    ToofanInputField(
+                                        value = uiState.localPhone,
+                                        onValueChange = { viewModel.onLocalPhoneChanged(it) },
+                                        placeholder = "812345678",
+                                        leadingIcon = {
+                                            Text(
+                                                text = uiState.selectedCountry.dialCode,
+                                                fontFamily = MulishFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ToofanGreen,
+                                                fontSize = 15.sp
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            Text(
+                                                text = "${uiState.localPhone.length}/9",
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (uiState.localPhone.length == 9) ToofanGreen else ToofanBodyText.copy(alpha = 0.5f)
+                                            )
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Number,
+                                            imeAction = ImeAction.Done
+                                        ),
+                                        testTag = "register_phone_input_field"
+                                    )
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
                                     Text(
-                                        text = "Récapitulatif de création",
+                                        text = "Numéro complet : ${uiState.fullPhone}",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 12.sp,
+                                        color = ToofanBodyText
+                                    )
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    // 3. OTP Verification Section (Strictly SMS / WhatsApp only, NO EMAIL)
+                                    Surface(
+                                        color = if (uiState.isPhoneVerified) ToofanGreen.copy(alpha = 0.08f) else ToofanBgColor,
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (uiState.isPhoneVerified) ToofanGreen else ToofanGrey1.copy(alpha = 0.6f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(14.dp)) {
+                                            if (uiState.isPhoneVerified) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Check, contentDescription = "Vérifié", tint = ToofanGreen)
+                                                    Text(
+                                                        text = "Numéro de téléphone vérifié par OTP avec succès !",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = ToofanGreen
+                                                    )
+                                                }
+                                            } else {
+                                                // Channel selection: SMS vs WhatsApp
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "Canal de réception du code OTP :",
+                                                        fontFamily = MulishFontFamily,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = ToofanMainDark
+                                                    )
+                                                    IconButton(
+                                                        onClick = {
+                                                            activeInfo = InfoContent(
+                                                                title = "Canal de Réception OTP",
+                                                                role = "Permet de recevoir le code d'activation temporaire soit par SMS classique, soit directement par WhatsApp.",
+                                                                rules = "L'e-mail n'est pas autorisé pour certifier une ligne téléphonique cliente.",
+                                                                faq = "Si vous n'avez pas de réseau cellulaire SMS, choisissez 'WhatsApp Direct' pour recevoir le code par internet."
+                                                            )
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Outlined.Info,
+                                                            contentDescription = "Info",
+                                                            tint = ToofanGreen,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    OtpChannelCard(
+                                                        title = "SMS sécurisé",
+                                                        channel = "sms",
+                                                        icon = Icons.Default.Sms,
+                                                        selected = selectedOtpChannel == "sms",
+                                                        modifier = Modifier.weight(1f)
+                                                    ) { selectedOtpChannel = "sms" }
+
+                                                    OtpChannelCard(
+                                                        title = "WhatsApp Direct",
+                                                        channel = "whatsapp",
+                                                        icon = Icons.Default.Chat,
+                                                        selected = selectedOtpChannel == "whatsapp",
+                                                        modifier = Modifier.weight(1f)
+                                                    ) { selectedOtpChannel = "whatsapp" }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(14.dp))
+
+                                                ToofanButton(
+                                                    title = if (uiState.isPhoneOtpSending) "Envoi en cours..." else "Envoyer le code OTP",
+                                                    onClick = {
+                                                        viewModel.sendRegisterPhoneOtp(
+                                                            phone = uiState.fullPhone,
+                                                            accountType = accountType,
+                                                            channel = selectedOtpChannel
+                                                        )
+                                                    },
+                                                    enabled = uiState.isPhoneValid && !uiState.isPhoneOtpSending,
+                                                    isLoading = uiState.isPhoneOtpSending,
+                                                    testTag = "send_register_otp_btn"
+                                                )
+
+                                                uiState.phoneOtpSuccess?.let {
+                                                    Spacer(modifier = Modifier.height(10.dp))
+                                                    Text(
+                                                        text = it,
+                                                        fontSize = 12.sp,
+                                                        color = ToofanGreen,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontFamily = MulishFontFamily
+                                                    )
+                                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                                    ToofanInputField(
+                                                        value = phoneOtpInput,
+                                                        onValueChange = {
+                                                            val digits = it.filter { ch -> ch.isDigit() }.take(6)
+                                                            phoneOtpInput = digits
+                                                            if (digits.length == 6) {
+                                                                viewModel.verifyRegisterPhoneOtp(
+                                                                    phone = uiState.fullPhone,
+                                                                    countryCode = uiState.selectedCountry.code,
+                                                                    country = uiState.selectedCountry.name,
+                                                                    otp = digits
+                                                                )
+                                                            }
+                                                        },
+                                                        placeholder = "Code OTP à 6 chiffres",
+                                                        leadingIcon = {
+                                                            Icon(Icons.Default.Security, contentDescription = null, tint = ToofanGreen)
+                                                        },
+                                                        trailingIcon = {
+                                                            Text(
+                                                                text = "${phoneOtpInput.length}/6",
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (phoneOtpInput.length == 6) ToofanGreen else ToofanBodyText
+                                                            )
+                                                        },
+                                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                        testTag = "register_otp_code_input"
+                                                    )
+
+                                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                                    ToofanButton(
+                                                        title = "Valider le code OTP",
+                                                        onClick = {
+                                                            viewModel.verifyRegisterPhoneOtp(
+                                                                phone = uiState.fullPhone,
+                                                                countryCode = uiState.selectedCountry.code,
+                                                                country = uiState.selectedCountry.name,
+                                                                otp = phoneOtpInput
+                                                            )
+                                                        },
+                                                        enabled = phoneOtpInput.length == 6 && !uiState.isPhoneOtpVerifying,
+                                                        isLoading = uiState.isPhoneOtpVerifying,
+                                                        containerColor = ToofanGreen,
+                                                        testTag = "validate_register_otp_btn"
+                                                    )
+                                                }
+
+                                                uiState.phoneOtpError?.let {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Text(
+                                                        text = it,
+                                                        fontSize = 12.sp,
+                                                        color = Color(0xFFEF4444),
+                                                        fontFamily = MulishFontFamily
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    // Preferred language
+                                    SelectDropdownField(
+                                        label = "Langue de l'interface",
+                                        selectedKey = language,
+                                        options = languageOptions,
+                                        onOptionSelected = { language = it },
+                                        onInfoClick = {
+                                            activeInfo = InfoContent(
+                                                title = "Langue de l'Interface",
+                                                role = "Langue utilisée pour les notifications, reçus de transfert et l'assistant CashPay.",
+                                                rules = "Choisissez parmi les langues supportées (Français, English, Swahili, Lingala...)."
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+
+                            1 -> {
+                                // STEP 2: Identité Personnelle
+                                Column {
+                                    Text(
+                                        text = "2. Identité Personnelle",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = ToofanMainDark
+                                    )
+                                    Text(
+                                        text = "Renseignez vos informations d'état civil officielles :",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 13.sp,
+                                        color = ToofanBodyText,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                                    )
+
+                                    FieldWithInfoLabel(title = "Prénom *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Prénom",
+                                            role = "Votre premier prénom officiel tel qu'inscrit sur votre carte d'identité ou passeport.",
+                                            rules = "Sans abréviation, caractères alphabétiques uniquement."
+                                        )
+                                    })
+                                    ToofanInputField(value = firstName, onValueChange = { firstName = it }, placeholder = "Ex: Patrick")
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Deuxième prénom (Post-nom)", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Post-nom",
+                                            role = "Deuxième prénom ou post-nom selon vos documents d'état civil.",
+                                            rules = "Optionnel si vous n'en possédez pas."
+                                        )
+                                    })
+                                    ToofanInputField(value = middleName, onValueChange = { middleName = it }, placeholder = "Ex: Lubanda")
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Nom de famille *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Nom de Famille",
+                                            role = "Nom patronymique officiel rattaché à votre compte bancaire / portefeuille.",
+                                            rules = "Conforme à la pièce d'identité."
+                                        )
+                                    })
+                                    ToofanInputField(value = lastName, onValueChange = { lastName = it }, placeholder = "Ex: Mpoyi")
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    SelectDropdownField(
+                                        label = "Genre",
+                                        selectedKey = gender,
+                                        options = genderOptions,
+                                        onOptionSelected = { gender = it },
+                                        onInfoClick = {
+                                            activeInfo = InfoContent(
+                                                title = "Genre",
+                                                role = "Information d'identification civile requise pour la conformité bancaire."
+                                            )
+                                        }
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Date de naissance (AAAA-MM-JJ)", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Date de Naissance",
+                                            role = "Permet de vérifier la majorité légale pour l'ouverture d'un compte financier.",
+                                            rules = "Format attendu : AAAA-MM-JJ (ex: 1990-05-14)."
+                                        )
+                                    })
+                                    ToofanInputField(value = birthDate, onValueChange = { birthDate = it }, placeholder = "1990-05-14")
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    SelectDropdownField(
+                                        label = "État civil",
+                                        selectedKey = maritalStatus,
+                                        options = maritalOptions,
+                                        onOptionSelected = { maritalStatus = it }
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Profession / Activité", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Profession",
+                                            role = "Nature de votre activité professionnelle principale (commerçant, ingénieur, consultant, étudiant...)."
+                                        )
+                                    })
+                                    ToofanInputField(value = profession, onValueChange = { profession = it }, placeholder = "Ex: Commerçant / Ingénieur")
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Adresse e-mail (Optionnelle)", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Adresse E-mail",
+                                            role = "Pour recevoir vos relevés mensuels au format PDF et les alertes de connexion.",
+                                            rules = "Optionnelle. La vérification principale s'effectue par téléphone/WhatsApp."
+                                        )
+                                    })
+                                    ToofanInputField(value = emailOptional, onValueChange = { emailOptional = it }, placeholder = "contact@example.com")
+                                }
+                            }
+
+                            2 -> {
+                                // STEP 3: Localisation & Résidence
+                                Column {
+                                    Text(
+                                        text = "3. Localisation & Résidence",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = ToofanMainDark
+                                    )
+                                    Text(
+                                        text = "Indiquez votre adresse de résidence actuelle :",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 13.sp,
+                                        color = ToofanBodyText,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                                    )
+
+                                    FieldWithInfoLabel(title = "Ville *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Ville de Résidence",
+                                            role = "Permet de situer les points de retrait et agences CashPay à proximité.",
+                                            rules = "Nom officiel de votre ville ou commune."
+                                        )
+                                    })
+                                    ToofanInputField(value = city, onValueChange = { city = it }, placeholder = "Ex: Kinshasa, Lubumbashi, Paris...")
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    FieldWithInfoLabel(title = "Adresse physique complète *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Adresse Physique",
+                                            role = "Adresse de domiciliation physique nécessaire à la vérification KYC.",
+                                            rules = "Numéro, Avenue, Quartier ou Rue."
+                                        )
+                                    })
+                                    ToofanInputField(value = address, onValueChange = { address = it }, placeholder = "Ex: 12 Av. de la Paix, Gombe")
+                                }
+                            }
+
+                            3 -> {
+                                // STEP 4: Pièce d'Identité & Documents
+                                Column {
+                                    Text(
+                                        text = "4. Pièce d'Identité & Sécurité",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = ToofanMainDark
+                                    )
+                                    Text(
+                                        text = "Certifiez votre identité pour sécuriser votre compte :",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 13.sp,
+                                        color = ToofanBodyText,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                                    )
+
+                                    SelectDropdownField(
+                                        label = "Type de pièce officielle",
+                                        selectedKey = idType,
+                                        options = idTypeOptions,
+                                        onOptionSelected = { idType = it },
+                                        onInfoClick = {
+                                            activeInfo = InfoContent(
+                                                title = "Type de Pièce d'Identité",
+                                                role = "Document officiel émis par l'État pour certifier votre identité.",
+                                                rules = "Passeport, Carte nationale, Permis de conduire ou Carte d'électeur."
+                                            )
+                                        }
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    FieldWithInfoLabel(title = "Numéro de la pièce *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Numéro de Pièce",
+                                            role = "Identifiant unique inscrit sur votre document officiel.",
+                                            rules = "Saisissez les chiffres et lettres exacts sans espaces superflus."
+                                        )
+                                    })
+                                    ToofanInputField(value = idNumber, onValueChange = { idNumber = it }, placeholder = "Ex: AB1234567")
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    Text(
+                                        text = "Photos justificatives (Recommandé) :",
                                         fontFamily = MulishFontFamily,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
-                                        color = BrandBlueMidnight
+                                        color = ToofanMainDark
                                     )
-                                    SummaryRow("Nom complet", "$firstName ${middleName.ifBlank { "" }} $lastName".trim())
-                                    SummaryRow("Téléphone", "${uiState.selectedCountry.dialCode} ${uiState.localPhone}")
-                                    SummaryRow("Type de compte", accountType.replaceFirstChar { it.uppercase() })
-                                    SummaryRow("Ville", city)
-                                    SummaryRow("Pièce d'identité", idNumber.ifBlank { "Fournie" })
-                                    SummaryRow("Photos & Signature", if (profilePhotoBase64 != null) "Attachées et compressées ✓" else "En attente")
-                                }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                                Button(
-                                    onClick = {
-                                        viewModel.submitRegistration(
-                                            accountType = accountType,
-                                            firstName = firstName,
-                                            middleName = middleName,
-                                            lastName = lastName,
-                                            gender = gender,
-                                            birthDate = birthDate,
-                                            maritalStatus = maritalStatus,
-                                            nationality = nationality,
-                                            city = city,
-                                            address = address,
-                                            profession = profession,
-                                            idType = idType,
-                                            idNumber = idNumber,
-                                            companyName = companyName,
-                                            idFrontBase64 = idFrontBase64,
-                                            profilePhotoBase64 = profilePhotoBase64,
-                                            signatureBase64 = signatureBase64,
-                                            language = language
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        CameraCaptureTile(
+                                            title = "Photo Pièce",
+                                            hasPhoto = idFrontBase64 != null,
+                                            icon = Icons.Default.CameraAlt,
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_FRONT }
                                         )
-                                    },
-                                    enabled = !uiState.isRegisterLoading,
-                                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(52.dp)
-                                        .testTag("submit_registration_button")
-                                ) {
-                                    if (uiState.isRegisterLoading) {
-                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                                    } else {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = Color.White)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "Créer mon Compte CashPay",
-                                                fontFamily = MulishFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = Color.White
-                                            )
-                                        }
+
+                                        CameraCaptureTile(
+                                            title = "Selfie Portrait",
+                                            hasPhoto = profilePhotoBase64 != null,
+                                            icon = Icons.Default.Face,
+                                            modifier = Modifier.weight(1f),
+                                            onClick = { activeCameraMode = CameraCaptureMode.SELFIE_PROFILE }
+                                        )
                                     }
                                 }
                             }
-                        }
 
-                        // Navigation Next / Prev Button
-                        if (regStep < 5) {
-                            val canProceed = when (regStep) {
-                                0 -> uiState.isPhoneVerified
-                                1 -> uiState.isEmailVerified
-                                2 -> firstName.isNotBlank() && lastName.isNotBlank()
-                                3 -> city.isNotBlank() && address.isNotBlank()
-                                4 -> idNumber.isNotBlank() && !(idNumber.startsWith("0000") || idNumber == "123456789")
-                                else -> true
-                            }
-
-                            Spacer(modifier = Modifier.height(18.dp))
-
-                            if (!canProceed) {
-                                val hintText = when (regStep) {
-                                    0 -> "Veuillez valider le code OTP envoyé à votre numéro pour continuer."
-                                    1 -> "Veuillez valider le code OTP envoyé à votre e-mail pour continuer."
-                                    2 -> "Veuillez renseigner votre Prénom et votre Nom de famille."
-                                    3 -> "Veuillez indiquer votre Ville et votre Adresse physique."
-                                    4 -> "Veuillez entrer un numéro de pièce d'identité valide sans doublon."
-                                    else -> "Veuillez compléter les informations requises."
-                                }
-                                Text(
-                                    text = hintText,
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFE11D48),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    if (canProceed && regStep < 5) regStep++
-                                },
-                                enabled = canProceed,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = BrandOrange,
-                                    disabledContainerColor = Color(0xFFCBD5E1)
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp)
-                                    .testTag("next_step_button")
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
+                            4 -> {
+                                // STEP 5: Code PIN Secret & Finalisation
+                                Column {
                                     Text(
-                                        text = "Étape Suivante",
+                                        text = "5. Code PIN & Finalisation",
                                         fontFamily = MulishFontFamily,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = Color.White
+                                        fontSize = 18.sp,
+                                        color = ToofanMainDark
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
+                                    Text(
+                                        text = "Créez votre code PIN secret et signez pour ouvrir votre compte :",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 13.sp,
+                                        color = ToofanBodyText,
+                                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                                    )
+
+                                    FieldWithInfoLabel(title = "Code PIN Secret (4 à 6 chiffres) *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Code PIN Secret",
+                                            role = "Votre clé de sécurité personnelle exigée pour valider les virements, paiements et retraits.",
+                                            rules = "4 à 6 chiffres confidentiels. Ne le partagez jamais.",
+                                            faq = "Que faire si je l'oublie ? Vous pourrez le réinitialiser avec votre numéro et OTP."
+                                        )
+                                    })
+                                    ToofanInputField(
+                                        value = pinCode,
+                                        onValueChange = { pinCode = it.filter { ch -> ch.isDigit() }.take(6) },
+                                        placeholder = "••••",
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    FieldWithInfoLabel(title = "Confirmer le Code PIN *", onInfoClick = {
+                                        activeInfo = InfoContent(
+                                            title = "Confirmation du PIN",
+                                            role = "Vérifie que vous n'avez pas commis de faute de frappe."
+                                        )
+                                    })
+                                    ToofanInputField(
+                                        value = pinConfirm,
+                                        onValueChange = { pinConfirm = it.filter { ch -> ch.isDigit() }.take(6) },
+                                        placeholder = "••••",
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                                    )
+
+                                    if (pinCode.isNotEmpty() && pinConfirm.isNotEmpty() && pinCode != pinConfirm) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Les codes PIN ne correspondent pas.",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFEF4444),
+                                            fontFamily = MulishFontFamily
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    Text(
+                                        text = "Signature manuscrite :",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = ToofanMainDark
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // Signature Drawing Pad
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(110.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(1.dp, ToofanGrey1.copy(alpha = 0.8f), RoundedCornerShape(12.dp)),
+                                        color = Color(0xFFFAFAFA)
+                                    ) {
+                                        Box {
+                                            Canvas(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .pointerDragGestures(
+                                                        onDragStart = { offset ->
+                                                            currentPath = listOf(offset)
+                                                        },
+                                                        onDrag = { change, _ ->
+                                                            change.consume()
+                                                            currentPath = currentPath + change.position
+                                                        },
+                                                        onDragEnd = {
+                                                            if (currentPath.isNotEmpty()) {
+                                                                signaturePaths.add(currentPath)
+                                                                currentPath = emptyList()
+                                                                signatureBase64 = exportPathsToBase64(signaturePaths)
+                                                            }
+                                                        }
+                                                    )
+                                            ) {
+                                                signaturePaths.forEach { pathPoints ->
+                                                    if (pathPoints.size > 1) {
+                                                        val path = Path().apply {
+                                                            moveTo(pathPoints.first().x, pathPoints.first().y)
+                                                            for (p in pathPoints.drop(1)) {
+                                                                lineTo(p.x, p.y)
+                                                            }
+                                                        }
+                                                        drawPath(
+                                                            path = path,
+                                                            color = ToofanMainDark,
+                                                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                                        )
+                                                    }
+                                                }
+
+                                                if (currentPath.size > 1) {
+                                                    val path = Path().apply {
+                                                        moveTo(currentPath.first().x, currentPath.first().y)
+                                                        for (p in currentPath.drop(1)) {
+                                                            lineTo(p.x, p.y)
+                                                        }
+                                                    }
+                                                    drawPath(
+                                                        path = path,
+                                                        color = ToofanGreen,
+                                                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                                    )
+                                                }
+                                            }
+
+                                            if (signaturePaths.isEmpty() && currentPath.isEmpty()) {
+                                                Text(
+                                                    text = "Signez ici avec votre doigt",
+                                                    fontFamily = MulishFontFamily,
+                                                    fontSize = 12.sp,
+                                                    color = ToofanBodyText.copy(alpha = 0.5f),
+                                                    modifier = Modifier.align(Alignment.Center)
+                                                )
+                                            }
+
+                                            if (signaturePaths.isNotEmpty()) {
+                                                IconButton(
+                                                    onClick = {
+                                                        signaturePaths.clear()
+                                                        currentPath = emptyList()
+                                                        signatureBase64 = null
+                                                    },
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(4.dp)
+                                                        .size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Effacer",
+                                                        tint = Color(0xFFEF4444),
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    // Summary overview
+                                    Surface(
+                                        color = ToofanBgColor,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            SummaryRow("Nom complet", "$firstName ${middleName.ifBlank { "" }} $lastName".trim())
+                                            SummaryRow("Téléphone", "${uiState.selectedCountry.dialCode} ${uiState.localPhone}")
+                                            SummaryRow("Type de compte", accountType.replaceFirstChar { it.uppercase() })
+                                            SummaryRow("Ville", city)
+                                            SummaryRow("Pièce d'identité", idNumber.ifBlank { "Renseignée" })
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    val isPinValid = pinCode.length >= 4 && pinCode == pinConfirm
+                                    ToofanButton(
+                                        title = if (uiState.isRegisterLoading) "Création en cours..." else "Créer mon Compte CashPay",
+                                        onClick = {
+                                            viewModel.submitRegistration(
+                                                accountType = accountType,
+                                                firstName = firstName,
+                                                middleName = middleName,
+                                                lastName = lastName,
+                                                gender = gender,
+                                                birthDate = birthDate,
+                                                maritalStatus = maritalStatus,
+                                                nationality = nationality,
+                                                city = city,
+                                                address = address,
+                                                profession = profession,
+                                                idType = idType,
+                                                idNumber = idNumber,
+                                                companyName = companyName,
+                                                idFrontBase64 = idFrontBase64,
+                                                profilePhotoBase64 = profilePhotoBase64,
+                                                signatureBase64 = signatureBase64,
+                                                language = language
+                                            )
+                                        },
+                                        enabled = isPinValid && !uiState.isRegisterLoading,
+                                        isLoading = uiState.isRegisterLoading,
+                                        testTag = "submit_registration_button"
+                                    )
                                 }
                             }
                         }
                     }
+
+                    // Bottom Navigation Button for intermediate steps (0 to 3)
+                    if (regStep < 4) {
+                        val canProceed = when (regStep) {
+                            0 -> uiState.isPhoneVerified
+                            1 -> firstName.isNotBlank() && lastName.isNotBlank()
+                            2 -> city.isNotBlank() && address.isNotBlank()
+                            3 -> idNumber.isNotBlank() && !(idNumber.startsWith("0000") || idNumber == "123456789")
+                            else -> true
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        if (!canProceed) {
+                            val hintText = when (regStep) {
+                                0 -> "Veuillez valider le code OTP envoyé à votre numéro pour continuer."
+                                1 -> "Veuillez renseigner votre Prénom et votre Nom de famille."
+                                2 -> "Veuillez indiquer votre Ville et votre Adresse physique."
+                                3 -> "Veuillez entrer un numéro de pièce d'identité valide."
+                                else -> "Veuillez compléter les informations requises."
+                            }
+                            Text(
+                                text = hintText,
+                                fontFamily = MulishFontFamily,
+                                fontSize = 12.sp,
+                                color = Color(0xFFE11D48),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            )
+                        }
+
+                        ToofanButton(
+                            title = "Étape Suivante ➔",
+                            onClick = {
+                                if (canProceed && regStep < 4) regStep++
+                            },
+                            enabled = canProceed,
+                            testTag = "next_step_button"
+                        )
+                    }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
+            Text(
+                text = "CashPay • Propulsé par FINUSECO SA",
+                fontFamily = MulishFontFamily,
+                fontSize = 11.sp,
+                color = Color(0xFF94A3B8),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun OtpChannelCard(
+    title: String,
+    channel: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onClick() }
+            .border(
+                width = if (selected) 1.8.dp else 1.dp,
+                color = if (selected) ToofanGreen else ToofanGrey1.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(10.dp)
+            ),
+        color = if (selected) ToofanGreen.copy(alpha = 0.08f) else ToofanWhite
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (selected) ToofanGreen else ToofanBodyText,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = title,
+                fontFamily = MulishFontFamily,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) ToofanGreen else ToofanMainDark
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldWithInfoLabel(
+    title: String,
+    onInfoClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            fontFamily = MulishFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = ToofanMainDark
+        )
+        IconButton(
+            onClick = onInfoClick,
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = "Info",
+                tint = ToofanGreen,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+@Composable
+private fun FieldInfoDialog(
+    content: InfoContent,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("J'ai compris", color = ToofanGreen, fontWeight = FontWeight.Bold)
+            }
+        },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = ToofanGreen
+                )
                 Text(
-                    text = "CashPay • Propulsé par FINUSECO SA",
+                    text = content.title,
                     fontFamily = MulishFontFamily,
-                    fontSize = 11.sp,
-                    color = Color(0xFF94A3B8),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = ToofanMainDark
                 )
             }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "🎯 Rôle & Importance :",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = ToofanMainDark
+                )
+                Text(
+                    text = content.role,
+                    fontSize = 13.sp,
+                    color = ToofanBodyText,
+                    lineHeight = 18.sp
+                )
+                Text(
+                    text = "📋 Règles & Format attendu :",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = ToofanMainDark
+                )
+                Text(
+                    text = content.rules,
+                    fontSize = 13.sp,
+                    color = ToofanBodyText,
+                    lineHeight = 18.sp
+                )
+                content.faq?.let {
+                    Text(
+                        text = "💡 Question fréquente :",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = ToofanMainDark
+                    )
+                    Text(
+                        text = it,
+                        fontSize = 13.sp,
+                        color = ToofanBodyText,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        },
+        shape = RoundedCornerShape(18.dp),
+        containerColor = ToofanWhite
+    )
+}
+
+@Composable
+private fun CameraCaptureTile(
+    title: String,
+    hasPhoto: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .border(
+                1.dp,
+                if (hasPhoto) ToofanGreen else ToofanGrey1.copy(alpha = 0.8f),
+                RoundedCornerShape(12.dp)
+            ),
+        color = if (hasPhoto) ToofanGreen.copy(alpha = 0.08f) else ToofanBgColor
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = if (hasPhoto) Icons.Default.Check else icon,
+                contentDescription = title,
+                tint = if (hasPhoto) ToofanGreen else ToofanBodyText,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (hasPhoto) "$title ✓" else title,
+                fontFamily = MulishFontFamily,
+                fontSize = 12.sp,
+                fontWeight = if (hasPhoto) FontWeight.Bold else FontWeight.Medium,
+                color = if (hasPhoto) ToofanGreen else ToofanMainDark,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -1368,8 +1591,8 @@ private fun SummaryRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = label, fontFamily = MulishFontFamily, fontSize = 12.sp, color = Color(0xFF64748B))
-        Text(text = value, fontFamily = MulishFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandBlueMidnight)
+        Text(text = label, fontFamily = MulishFontFamily, fontSize = 12.sp, color = ToofanBodyText)
+        Text(text = value, fontFamily = MulishFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ToofanMainDark)
     }
 }
 
@@ -1379,39 +1602,86 @@ private fun SelectDropdownField(
     label: String,
     selectedKey: String,
     options: List<SelectOption>,
-    onOptionSelected: (String) -> Unit
+    onOptionSelected: (String) -> Unit,
+    onInfoClick: (() -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentLabel = options.find { it.key == selectedKey }?.label ?: selectedKey
 
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = currentLabel,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            options.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(opt.label, fontFamily = MulishFontFamily, fontWeight = FontWeight.Medium) },
-                    onClick = {
-                        onOptionSelected(opt.key)
-                        expanded = false
-                    }
-                )
+            Text(
+                text = label,
+                fontFamily = MulishFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = ToofanMainDark
+            )
+            if (onInfoClick != null) {
+                IconButton(
+                    onClick = onInfoClick,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = "Info",
+                        tint = ToofanGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, ToofanGrey1.copy(alpha = 0.8f), RoundedCornerShape(10.dp))
+                    .menuAnchor(),
+                color = ToofanWhite
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = currentLabel,
+                        fontFamily = MulishFontFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ToofanMainDark
+                    )
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                }
+            }
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { opt ->
+                    DropdownMenuItem(
+                        text = { Text(opt.label, fontFamily = MulishFontFamily, fontWeight = FontWeight.Medium) },
+                        onClick = {
+                            onOptionSelected(opt.key)
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }
@@ -1428,24 +1698,77 @@ private fun AccountTypeOption(
     val isSelected = selectedType == typeValue
     Surface(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable { onSelect(typeValue) }
             .border(
                 1.5.dp,
-                if (isSelected) BrandOrange else Color(0xFFCBD5E1),
-                RoundedCornerShape(12.dp)
+                if (isSelected) ToofanGreen else ToofanGrey1.copy(alpha = 0.6f),
+                RoundedCornerShape(10.dp)
             ),
-        color = if (isSelected) BrandOrange.copy(alpha = 0.10f) else Color.White
+        color = if (isSelected) ToofanGreen.copy(alpha = 0.10f) else ToofanWhite
     ) {
         Text(
             text = label,
             fontFamily = MulishFontFamily,
             fontSize = 13.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) BrandOrange else BrandBlueMidnight,
+            color = if (isSelected) ToofanGreen else ToofanMainDark,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp)
         )
+    }
+}
+
+private fun Modifier.pointerDragGestures(
+    onDragStart: (Offset) -> Unit,
+    onDrag: (PointerInputChange, Offset) -> Unit,
+    onDragEnd: () -> Unit
+): Modifier = this.pointerInput(Unit) {
+    detectDragGestures(
+        onDragStart = { offset -> onDragStart(offset) },
+        onDragEnd = { onDragEnd() },
+        onDragCancel = { onDragEnd() },
+        onDrag = { change, dragAmount -> onDrag(change, dragAmount) }
+    )
+}
+
+private fun exportPathsToBase64(paths: List<List<Offset>>): String? {
+    if (paths.isEmpty()) return null
+    return try {
+        val width = 400
+        val height = 200
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val paint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            strokeWidth = 4f
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            isAntiAlias = true
+        }
+
+        paths.forEach { points ->
+            if (points.size > 1) {
+                val p = android.graphics.Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    for (pt in points.drop(1)) {
+                        lineTo(pt.x, pt.y)
+                    }
+                }
+                canvas.drawPath(p, paint)
+            }
+        }
+
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream)
+        val byteArray = stream.toByteArray()
+        val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        "data:image/png;base64,$base64"
+    } catch (_: Exception) {
+        null
     }
 }
 
@@ -1462,11 +1785,7 @@ fun RegistrationSuccessView(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(BrandBlueMidnight, BrandBlueDark, Color(0xFF030A1C))
-                )
-            )
+            .background(ToofanBgColor)
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(24.dp)
@@ -1485,7 +1804,7 @@ fun RegistrationSuccessView(
                 Image(
                     painter = painterResource(id = R.drawable.cashpay_logo_white),
                     contentDescription = "CashPay Logo",
-                    modifier = Modifier.height(38.dp)
+                    modifier = Modifier.height(48.dp)
                 )
 
                 Spacer(modifier = Modifier.height(30.dp))
@@ -1494,14 +1813,14 @@ fun RegistrationSuccessView(
                 Box(
                     modifier = Modifier
                         .size(90.dp)
-                        .background(BrandGreen.copy(alpha = 0.18f), CircleShape)
-                        .border(3.dp, BrandGreen, CircleShape),
+                        .background(ToofanGreen.copy(alpha = 0.18f), CircleShape)
+                        .border(3.dp, ToofanGreen, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Succès",
-                        tint = BrandGreen,
+                        tint = ToofanGreen,
                         modifier = Modifier.size(50.dp)
                     )
                 }
@@ -1524,18 +1843,18 @@ fun RegistrationSuccessView(
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = BrandOrangeLight,
+                    color = ToofanGreen,
                     textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Official Wallet ID Card returned by server
-                Card(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1938)),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, BrandOrange)
+                    color = Color(0xFF0C1938),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ToofanGreen)
                 ) {
                     Column(
                         modifier = Modifier
@@ -1567,7 +1886,7 @@ fun RegistrationSuccessView(
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (copied) BrandGreen.copy(alpha = 0.2f) else BrandOrange.copy(alpha = 0.2f),
+                            color = if (copied) ToofanGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                             modifier = Modifier.clickable {
                                 clipboardManager.setText(AnnotatedString(walletId))
                                 copied = true
@@ -1581,7 +1900,7 @@ fun RegistrationSuccessView(
                                 Icon(
                                     imageVector = if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                                     contentDescription = "Copier",
-                                    tint = if (copied) BrandGreen else BrandOrangeLight,
+                                    tint = if (copied) ToofanGreen else Color.White,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
@@ -1589,7 +1908,7 @@ fun RegistrationSuccessView(
                                     fontFamily = MulishFontFamily,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (copied) BrandGreen else BrandOrangeLight
+                                    color = if (copied) ToofanGreen else Color.White
                                 )
                             }
                         }
@@ -1598,7 +1917,6 @@ fun RegistrationSuccessView(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Information security note
                 Surface(
                     color = Color.White.copy(alpha = 0.07f),
                     shape = RoundedCornerShape(12.dp),
@@ -1612,7 +1930,7 @@ fun RegistrationSuccessView(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = BrandOrangeLight,
+                            tint = ToofanGreen,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
@@ -1626,37 +1944,17 @@ fun RegistrationSuccessView(
                 }
             }
 
-            // Bottom CTA
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Button(
+                ToofanButton(
+                    title = "Accéder à la Connexion",
                     onClick = onGoToLogin,
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("success_login_button")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Accéder à la Connexion",
-                            fontFamily = MulishFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
-                    }
-                }
+                    testTag = "success_login_button"
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
 

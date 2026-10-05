@@ -537,6 +537,18 @@ fun SubTabLoanHistory(
     uiState: DashboardUiState,
     viewModel: DashboardViewModel
 ) {
+    var selectedFilter by remember { mutableStateOf("ALL") } // "ALL", "ACTIVE", "REPAID", "FINISHED", "REJECTED"
+
+    val filteredList = remember(uiState.loanHistory, selectedFilter) {
+        when (selectedFilter) {
+            "ACTIVE" -> uiState.loanHistory.filter { (it.status ?: "").lowercase() in listOf("approved", "active", "en_cours") }
+            "REPAID" -> uiState.loanHistory.filter { (it.status ?: "").lowercase() in listOf("repaid", "remboursé") }
+            "FINISHED" -> uiState.loanHistory.filter { it.isFinished || (it.status ?: "").lowercase() in listOf("finished", "terminé") }
+            "REJECTED" -> uiState.loanHistory.filter { (it.status ?: "").lowercase() in listOf("rejected", "rejeté") }
+            else -> uiState.loanHistory
+        }
+    }
+
     if (uiState.isLoadingLoanHistory) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = ToofanGreen)
@@ -568,59 +580,102 @@ fun SubTabLoanHistory(
             )
         }
     } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(uiState.loanHistory) { item ->
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Filter categories: Tous, En cours, Remboursés, Terminés, Rejetés
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val filters = listOf(
+                    "ALL" to "Tous",
+                    "ACTIVE" to "En cours",
+                    "REPAID" to "Remboursés",
+                    "FINISHED" to "Terminés",
+                    "REJECTED" to "Rejetés"
+                )
+                filters.forEach { (key, label) ->
+                    val isSelected = selectedFilter == key
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) ToofanGreen else ToofanGrey1.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { selectedFilter = key }
+                    ) {
+                        Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "Prêt de ${String.format("%.2f", item.amount)} ${item.currency}",
+                                text = label,
                                 fontFamily = MulishFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = ToofanMainDark
+                                fontSize = 9.sp,
+                                color = if (isSelected) Color.White else ToofanMainDark
                             )
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = when (item.status?.lowercase()) {
-                                    "approved" -> ToofanGreen.copy(alpha = 0.15f)
-                                    "repaid" -> ToofanBlue.copy(alpha = 0.15f)
-                                    "rejected" -> Color(0xFFFFECEF)
-                                    else -> ToFocusBorderColor.copy(alpha = 0.15f)
-                                }
+                        }
+                    }
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredList) { item ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = (item.status ?: "REQUESTED").uppercase(),
+                                    text = "Prêt #${item.id} — ${String.format("%.2f", item.amount)} ${item.currency}",
                                     fontFamily = MulishFontFamily,
-                                    fontSize = 8.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = when (item.status?.lowercase()) {
-                                        "approved" -> ToofanGreen
-                                        "repaid" -> ToofanBlue
-                                        "rejected" -> Color(0xFFFF4868)
-                                        else -> ToFocusBorderColor
-                                    },
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    fontSize = 12.sp,
+                                    color = ToofanMainDark
                                 )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = when (item.status?.lowercase()) {
+                                        "approved", "active", "en_cours" -> ToofanGreen.copy(alpha = 0.15f)
+                                        "repaid", "remboursé" -> ToofanBlue.copy(alpha = 0.15f)
+                                        "rejected", "rejeté" -> Color(0xFFFFECEF)
+                                        else -> ToFocusBorderColor.copy(alpha = 0.15f)
+                                    }
+                                ) {
+                                    Text(
+                                        text = (item.status ?: "REQUESTED").uppercase(),
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (item.status?.lowercase()) {
+                                            "approved", "active", "en_cours" -> ToofanGreen
+                                            "repaid", "remboursé" -> ToofanBlue
+                                            "rejected", "rejeté" -> Color(0xFFFF4868)
+                                            else -> ToFocusBorderColor
+                                        },
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
+                            Text(
+                                text = "Restant : ${String.format("%.2f", item.remainingBalance)} ${item.currency} • Déjà remboursé : ${String.format("%.2f", item.repaidAmount)} ${item.currency}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ToFocusBorderColor
+                            )
+                            Text(
+                                text = "Date de demande: ${item.startDate ?: "-"} • Échéance: ${item.endDate ?: "-"}",
+                                fontSize = 9.sp,
+                                color = ToofanBodyText
+                            )
                         }
-                        Text(
-                            text = "Date de demande: ${item.startDate ?: "-"} • Échéance: ${item.endDate ?: "-"}",
-                            fontSize = 10.sp,
-                            color = ToofanBodyText
-                        )
                     }
                 }
             }

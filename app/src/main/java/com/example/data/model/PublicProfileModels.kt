@@ -10,13 +10,6 @@ data class BitcoinPublicDto(
 )
 
 @JsonClass(generateAdapter = true)
-data class BoutiqueDto(
-    @Json(name = "id") val id: String,
-    @Json(name = "name") val name: String,
-    @Json(name = "address") val address: String? = null
-)
-
-@JsonClass(generateAdapter = true)
 data class PublicProfileDto(
     @Json(name = "walletId") val walletId: String,
     @Json(name = "fullName") val fullName: String,

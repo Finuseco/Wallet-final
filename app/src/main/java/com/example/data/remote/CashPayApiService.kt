@@ -26,6 +26,8 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.DELETE
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -228,4 +230,58 @@ interface CashPayApiService {
     suspend fun transferAgentCommission(
         @Body request: com.example.data.model.AgentCommissionTransferRequest
     ): Response<com.example.data.model.AgentCommissionTransferResponse>
+
+    // --- SHOPPING AGENT API ---
+    @GET("api/v1/shopping/products")
+    suspend fun getShoppingProducts(): Response<com.example.data.model.ShoppingContextResponse>
+
+    @POST("api/v1/shopping/products")
+    suspend fun publishProduct(
+        @Body request: com.example.data.model.PublishProductRequest
+    ): Response<com.example.data.model.ProductResponse>
+
+    @GET("api/v1/shopping/products/{id}")
+    suspend fun getProduct(
+        @Path("id") productId: String
+    ): Response<com.example.data.model.ProductResponse>
+
+    @PUT("api/v1/shopping/products/{id}")
+    suspend fun updateProduct(
+        @Path("id") productId: String,
+        @Body request: com.example.data.model.PublishProductRequest
+    ): Response<com.example.data.model.ProductResponse>
+
+    @DELETE("api/v1/shopping/products/{id}")
+    suspend fun deleteProduct(
+        @Path("id") productId: String
+    ): Response<com.example.data.model.GenericShoppingResponse>
+
+    @GET("api/v1/shopping/products/{id}/reference")
+    suspend fun getProductReference(
+        @Path("id") productId: String
+    ): Response<com.example.data.model.ProductReferenceResponse>
+
+    @GET("api/v1/shopping/boutiques")
+    suspend fun getShoppingBoutiques(): Response<com.example.data.model.BoutiquesResponse>
+
+    @POST("api/v1/shopping/boutiques")
+    suspend fun createBoutique(
+        @Body request: com.example.data.model.CreateBoutiqueRequest
+    ): Response<com.example.data.model.BoutiqueResponse>
+
+    @GET("api/v1/shopping/boutiques/{id}")
+    suspend fun getBoutique(
+        @Path("id") boutiqueId: String
+    ): Response<com.example.data.model.BoutiqueResponse>
+
+    @PUT("api/v1/shopping/boutiques/{id}")
+    suspend fun updateBoutique(
+        @Path("id") boutiqueId: String,
+        @Body request: com.example.data.model.CreateBoutiqueRequest
+    ): Response<com.example.data.model.BoutiqueResponse>
+
+    @DELETE("api/v1/shopping/boutiques/{id}")
+    suspend fun deleteBoutique(
+        @Path("id") boutiqueId: String
+    ): Response<com.example.data.model.GenericShoppingResponse>
 }

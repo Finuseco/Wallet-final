@@ -35,6 +35,7 @@ import com.example.ui.theme.ToofanMainDark
 import com.example.ui.theme.ToofanWhite
 
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.input.VisualTransformation
 
 @Composable
 fun ToofanButton(
@@ -101,6 +102,7 @@ fun ToofanInputField(
     placeholder: String = "",
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     singleLine: Boolean = true,
@@ -138,6 +140,7 @@ fun ToofanInputField(
                     value = value,
                     onValueChange = onValueChange,
                     singleLine = singleLine,
+                    visualTransformation = visualTransformation,
                     textStyle = TextStyle(
                         color = ToofanMainDark,
                         fontSize = 15.sp,

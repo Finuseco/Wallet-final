@@ -15,6 +15,9 @@ object ApiClient {
     @Volatile
     var sessionToken: String? = null
 
+    @Volatile
+    var tokenProvider: (() -> String?)? = null
+
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
         .build()
@@ -27,8 +30,11 @@ object ApiClient {
         val original = chain.request()
         val builder = original.newBuilder()
 
-        val token = sessionToken
+        val token = sessionToken ?: tokenProvider?.invoke()
         if (!token.isNullOrBlank()) {
+            if (sessionToken == null) {
+                sessionToken = token
+            }
             builder.addHeader("Cookie", "cashpay-token=$token")
             builder.addHeader("cashpay-token", token)
             builder.addHeader("Authorization", "Bearer $token")
