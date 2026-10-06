@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -109,23 +110,24 @@ fun LoginScreen(
             .fillMaxSize()
             .background(ToofanBgColor)
     ) {
-        // Full screen vivid fintech background image with professional contrast
+        // Full screen vivid fintech background image 100% visible
         Image(
             painter = painterResource(id = R.drawable.fintech_bg_person_1790609860029),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
-            alpha = 0.50f
+            alpha = 1.0f
         )
+        // Subtle soft vignette so background image stays 100% clear and real
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xCC070F22),
-                            Color(0xAA0F1E3D),
-                            Color(0xDD050B17)
+                            Color(0x22070F22),
+                            Color(0x330F1E3D),
+                            Color(0x55050B17)
                         )
                     )
                 )
@@ -135,9 +137,11 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 

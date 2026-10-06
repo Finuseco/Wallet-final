@@ -173,17 +173,16 @@ fun InstallationGuideScreen(
             contentScale = ContentScale.Crop
         )
 
-        // Immersive dark gradient overlay from transparent top to rich dark blue bottom
+        // Soft transparent gradient overlay so background image is 100% crisp and visible
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
+                            Color.Transparent,
                             Color.Black.copy(alpha = 0.25f),
-                            Color.Black.copy(alpha = 0.45f),
-                            BrandBlueMidnight.copy(alpha = 0.85f),
-                            BrandBlueMidnight
+                            Color.Black.copy(alpha = 0.55f)
                         ),
                         startY = 0f
                     )

@@ -88,7 +88,7 @@ fun ExchangeDialog(
 ) {
     if (!isOpen) return
 
-    val availableCurrencies = remember { listOf("USD", "CDF", "EUR", "GBP", "BTC") }
+    val availableCurrencies = remember { listOf("USD", "EUR", "NAT", "GBP", "BTC") }
     var showInfoDialog by remember { mutableStateOf(false) }
 
     // Source available balance
@@ -98,7 +98,7 @@ fun ExchangeDialog(
         val code = fromCurrency.uppercase()
         when (code) {
             "USD" -> fiatMap["USD"] ?: 0.0
-            "CDF" -> fiatMap["CDF"] ?: (fiatMap["national"] ?: 0.0)
+            "CDF", "NAT" -> fiatMap["CDF"] ?: (fiatMap["national"] ?: 0.0)
             "EUR" -> fiatMap["EUR"] ?: 0.0
             "GBP" -> fiatMap["GBP"] ?: 0.0
             "BTC" -> cryptoList.find { it.currency.uppercase() == "BTC" }?.balance ?: (walletResponse?.bitcoin?.balance ?: 0.0)
@@ -108,8 +108,8 @@ fun ExchangeDialog(
 
     // Indicative exchange rate estimation
     val indicativeRate = remember(fromCurrency, toCurrency) {
-        val from = fromCurrency.uppercase()
-        val to = toCurrency.uppercase()
+        val from = fromCurrency.uppercase().let { if (it == "NAT") "CDF" else it }
+        val to = toCurrency.uppercase().let { if (it == "NAT") "CDF" else it }
         when {
             from == "USD" && to == "CDF" -> 2800.0
             from == "CDF" && to == "USD" -> 1.0 / 2800.0
@@ -336,33 +336,34 @@ fun ExchangeDialog(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Currency Chips Row (Fully visible across whole screen)
+                            // Source Currency Chips Row (High contrast)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 availableCurrencies.forEach { curr ->
-                                    val isSelected = fromCurrency == curr
+                                    val isSelected = fromCurrency == curr || (fromCurrency == "CDF" && curr == "NAT")
+                                    val chipLabel = if (curr == "NAT") "Nat." else curr
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(38.dp)
+                                            .height(40.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(if (isSelected) Color(0xFF00E676) else Color(0xFF0F172A))
                                             .border(
-                                                1.dp,
+                                                1.5.dp,
                                                 if (isSelected) Color(0xFF00E676) else Color(0xFF334155),
                                                 RoundedCornerShape(10.dp)
                                             )
-                                            .clickable { onFromCurrencyChange(curr) },
+                                            .clickable { onFromCurrencyChange(if (curr == "NAT") "CDF" else curr) },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = curr,
+                                            text = chipLabel,
                                             fontFamily = MulishFontFamily,
                                             fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) Color(0xFF0F172A) else Color.White
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSelected) Color(0xFF0B0F19) else Color.White
                                         )
                                     }
                                 }
@@ -418,33 +419,34 @@ fun ExchangeDialog(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Destination Currency Chips Row (Fully visible across whole screen)
+                            // Destination Currency Chips Row (High-contrast, fully visible)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 availableCurrencies.forEach { curr ->
-                                    val isSelected = toCurrency == curr
+                                    val isSelected = toCurrency == curr || (toCurrency == "CDF" && curr == "NAT")
+                                    val chipLabel = if (curr == "NAT") "Nat." else curr
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(38.dp)
+                                            .height(40.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isSelected) Color(0xFF06B6D4) else Color(0xFF0F172A))
+                                            .background(if (isSelected) Color(0xFF38BDF8) else Color(0xFF0F172A))
                                             .border(
-                                                1.dp,
-                                                if (isSelected) Color(0xFF06B6D4) else Color(0xFF334155),
+                                                1.5.dp,
+                                                if (isSelected) Color(0xFF38BDF8) else Color(0xFF334155),
                                                 RoundedCornerShape(10.dp)
                                             )
-                                            .clickable { onToCurrencyChange(curr) },
+                                            .clickable { onToCurrencyChange(if (curr == "NAT") "CDF" else curr) },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = curr,
+                                            text = chipLabel,
                                             fontFamily = MulishFontFamily,
                                             fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) Color(0xFF0F172A) else Color.White
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSelected) Color(0xFF0B0F19) else Color.White
                                         )
                                     }
                                 }

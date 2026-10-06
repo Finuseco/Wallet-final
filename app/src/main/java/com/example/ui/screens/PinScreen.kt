@@ -69,23 +69,24 @@ fun PinScreen(
             .fillMaxSize()
             .background(ToofanBgColor)
     ) {
-        // Full screen vivid fintech background image
+        // Full screen vivid fintech background image 100% visible
         Image(
             painter = painterResource(id = R.drawable.fintech_bg_person_1790609860029),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
-            alpha = 0.50f
+            alpha = 1.0f
         )
+        // Soft vignette so background photo remains 100% clear
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xCC070F22),
-                            Color(0xAA0F1E3D),
-                            Color(0xDD050B17)
+                            Color(0x22070F22),
+                            Color(0x330F1E3D),
+                            Color(0x55050B17)
                         )
                     )
                 )
