@@ -26,3 +26,22 @@ data class ExchangeResponse(
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class ExchangeRateItemDto(
+    @Json(name = "from") val from: String? = null,
+    @Json(name = "to") val to: String? = null,
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "pair") val pair: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ExchangeRatesResponse(
+    @Json(name = "success") val success: Boolean = true,
+    @Json(name = "countryCode") val countryCode: String? = null,
+    @Json(name = "nationalCurrency") val nationalCurrency: String? = null,
+    @Json(name = "rates") val rates: Map<String, Double>? = null,
+    @Json(name = "pairs") val pairs: List<ExchangeRateItemDto>? = null,
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "error") val error: String? = null
+)

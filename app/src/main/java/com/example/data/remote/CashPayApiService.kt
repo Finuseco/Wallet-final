@@ -315,4 +315,22 @@ interface CashPayApiService {
     suspend fun depositPayPal(
         @Body request: com.example.data.model.DepositGatewayRequest
     ): Response<com.example.data.model.DepositGatewayResponse>
+
+    // --- RATES / EXCHANGE RATES API ---
+    @GET("api/v1/rates")
+    suspend fun getExchangeRates(
+        @Query("countryCode") countryCode: String? = null
+    ): Response<com.example.data.model.ExchangeRatesResponse>
+
+    // --- AGENT CUSTOMER ONBOARDING (Cahier des charges) ---
+    @GET("api/v1/agents/customers/options")
+    suspend fun getAgentCustomerOptions(): Response<com.example.data.model.AgentCustomerOptionsResponse>
+
+    @POST("api/v1/agents/customers/register")
+    suspend fun registerAgentCustomer(
+        @Body request: com.example.data.model.AgentRegisterCustomerRequest
+    ): Response<com.example.data.model.AgentRegisterCustomerResponse>
+
+    @GET("api/v1/agents/customers")
+    suspend fun getAgentCustomers(): Response<com.example.data.model.AgentCustomerListResponse>
 }

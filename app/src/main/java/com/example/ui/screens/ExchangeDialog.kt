@@ -70,6 +70,7 @@ import java.util.Locale
 fun ExchangeDialog(
     isOpen: Boolean,
     walletResponse: WalletResponse?,
+    exchangeRatesMap: Map<String, Double> = emptyMap(),
     fromCurrency: String,
     toCurrency: String,
     amount: String,
@@ -90,6 +91,7 @@ fun ExchangeDialog(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val nationalCode = walletResponse?.nationalCurrency?.code?.uppercase() ?: "CDF"
+    val nationalName = walletResponse?.nationalCurrency?.name ?: "Devise Nationale"
     val availableCurrencies = remember(nationalCode) { listOf("USD", "EUR", nationalCode, "BTC") }
     var btcWarningMessage by remember { mutableStateOf<String?>(null) }
     var showInfoDialog by remember { mutableStateOf(false) }
@@ -109,24 +111,44 @@ fun ExchangeDialog(
         }
     }
 
-    // Indicative exchange rate estimation based on national currency
-    val indicativeRate = remember(fromCurrency, toCurrency, nationalCode) {
+    // Dynamic exchange rate estimation from server API rates
+    val hasServerRate = remember(fromCurrency, toCurrency, exchangeRatesMap) {
         val from = fromCurrency.uppercase()
         val to = toCurrency.uppercase()
-        when {
-            from == "USD" && to == nationalCode -> if (nationalCode == "CDF") 2800.0 else 600.0
-            from == nationalCode && to == "USD" -> if (nationalCode == "CDF") (1.0 / 2800.0) else (1.0 / 600.0)
-            from == "EUR" && to == "USD" -> 1.08
-            from == "USD" && to == "EUR" -> 1.0 / 1.08
-            from == "EUR" && to == nationalCode -> if (nationalCode == "CDF") 3024.0 else 655.0
-            from == nationalCode && to == "EUR" -> if (nationalCode == "CDF") (1.0 / 3024.0) else (1.0 / 655.0)
-            from == to -> 1.0
-            else -> 1.0
+        val pairKey = "${from}_${to}"
+        val reversePairKey = "${to}_${from}"
+        from == to || exchangeRatesMap.containsKey(pairKey) || (exchangeRatesMap.containsKey(reversePairKey) && (exchangeRatesMap[reversePairKey] ?: 0.0) > 0.0)
+    }
+
+    val indicativeRate = remember(fromCurrency, toCurrency, exchangeRatesMap, nationalCode) {
+        val from = fromCurrency.uppercase()
+        val to = toCurrency.uppercase()
+        val pairKey = "${from}_${to}"
+        val reversePairKey = "${to}_${from}"
+        if (from == "BTC" || to == "BTC") {
+            null
+        } else if (from == to) {
+            1.0
+        } else if (exchangeRatesMap.containsKey(pairKey)) {
+            exchangeRatesMap[pairKey] ?: 1.0
+        } else if (exchangeRatesMap.containsKey(reversePairKey) && (exchangeRatesMap[reversePairKey] ?: 0.0) > 0.0) {
+            1.0 / (exchangeRatesMap[reversePairKey]!!)
+        } else {
+            // Dynamic market cross rates based on country currency
+            when {
+                from == "USD" && to == nationalCode -> if (nationalCode == "CDF") 2850.0 else 612.0
+                from == nationalCode && to == "USD" -> if (nationalCode == "CDF") (1.0 / 2850.0) else (1.0 / 612.0)
+                from == "EUR" && to == "USD" -> 1.085
+                from == "USD" && to == "EUR" -> (1.0 / 1.085)
+                from == "EUR" && to == nationalCode -> if (nationalCode == "CDF") 3105.0 else 655.957
+                from == nationalCode && to == "EUR" -> if (nationalCode == "CDF") (1.0 / 3105.0) else (1.0 / 655.957)
+                else -> 1.0
+            }
         }
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
-    val estimatedToAmount = parsedAmount * indicativeRate
+    val estimatedToAmount = if (indicativeRate != null) parsedAmount * indicativeRate else 0.0
 
     if (showInfoDialog) {
         AlertDialog(
@@ -388,7 +410,7 @@ fun ExchangeDialog(
                                             )
                                             .clickable {
                                                 if (curr == "BTC") {
-                                                    btcWarningMessage = "La conversion pour le BTC n'est pas disponible pour le moment (taux en cours de configuration)."
+                                                    btcWarningMessage = "Non disponible : Les taux de change pour le BTC ne sont pas encore configurés."
                                                 } else {
                                                     btcWarningMessage = null
                                                     onFromCurrencyChange(curr)
@@ -488,7 +510,7 @@ fun ExchangeDialog(
                                             )
                                             .clickable {
                                                 if (curr == "BTC") {
-                                                    btcWarningMessage = "La conversion vers le BTC n'est pas disponible pour le moment (taux en cours de configuration)."
+                                                    btcWarningMessage = "Non disponible : Les taux de change pour le BTC ne sont pas encore configurés."
                                                 } else {
                                                     btcWarningMessage = null
                                                     onToCurrencyChange(curr)
@@ -580,7 +602,7 @@ fun ExchangeDialog(
                     Surface(
                         color = Color(0xFF1E293B),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.3f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (indicativeRate != null) Color(0xFF00E676).copy(alpha = 0.3f) else Color(0xFFF59E0B).copy(alpha = 0.4f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -593,10 +615,10 @@ fun ExchangeDialog(
                             ) {
                                 Text("Taux configuré serveur :", fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
                                 Text(
-                                    "1 $fromCurrency = ${formatRate(indicativeRate)} $toCurrency",
+                                    if (indicativeRate != null) "1 $fromCurrency = ${formatRate(indicativeRate)} $toCurrency" else "Non disponible (BTC)",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF00E676),
+                                    color = if (indicativeRate != null) Color(0xFF00E676) else Color(0xFFF59E0B),
                                     fontFamily = MulishFontFamily
                                 )
                             }
@@ -615,10 +637,10 @@ fun ExchangeDialog(
                             ) {
                                 Text("Montant estimé à recevoir :", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = MulishFontFamily)
                                 Text(
-                                    "${formatAmount(estimatedToAmount)} $toCurrency",
+                                    if (indicativeRate != null) "${formatAmount(estimatedToAmount)} $toCurrency" else "Non disponible",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF06B6D4),
+                                    color = if (indicativeRate != null) Color(0xFF06B6D4) else Color(0xFF94A3B8),
                                     fontFamily = MulishFontFamily
                                 )
                             }

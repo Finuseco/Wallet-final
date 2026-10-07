@@ -175,6 +175,7 @@ fun DashboardScreen(
     var selectedContactForProfile by remember { mutableStateOf<com.example.data.model.PhoneContact?>(null) }
 
     var showServicesDialog by remember { mutableStateOf(false) }
+    var isAgentCustomerListOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Color(0xFF000E38),
@@ -396,7 +397,38 @@ fun DashboardScreen(
         onLoanCurrencyChange = { dashboardViewModel.setAgentLoanCurrency(it) },
         onLoanPinChange = { dashboardViewModel.setAgentLoanPin(it) },
         onSubmitLoanRepay = { dashboardViewModel.submitAgentLoanRepay(userProfile?.id ?: 1) },
-        onResetLoanRepay = { dashboardViewModel.resetAgentLoanRepay() }
+        onResetLoanRepay = { dashboardViewModel.resetAgentLoanRepay() },
+        onOpenRegisterCustomer = { dashboardViewModel.openAgentCustomerRegister() },
+        onOpenCustomerList = {
+            dashboardViewModel.loadAgentCustomersList()
+            isAgentCustomerListOpen = true
+        }
+    )
+
+    // Agent Customer Onboarding Dialog (KYC Registration Module)
+    AgentCustomerOnboardingDialog(
+        isOpen = uiState.isAgentCustomerSheetOpen,
+        optionsResponse = uiState.agentCustomerOptions,
+        isLoadingOptions = uiState.isAgentCustomerOptionsLoading,
+        isRegistering = uiState.isAgentRegisteringCustomer,
+        registerSuccess = uiState.agentCustomerRegisterSuccess,
+        registerError = uiState.agentCustomerRegisterError,
+        onDismiss = { dashboardViewModel.closeAgentCustomerRegister() },
+        onSubmitRegister = { dashboardViewModel.registerAgentCustomer(it) },
+        onRetryOptions = { dashboardViewModel.loadAgentCustomerOptions() }
+    )
+
+    // Agent Customer List Dialog (Mes Clients Parrainés)
+    AgentCustomerListDialog(
+        isOpen = isAgentCustomerListOpen,
+        customersList = uiState.agentCustomersList,
+        isLoading = uiState.isLoadingAgentCustomers,
+        onDismiss = { isAgentCustomerListOpen = false },
+        onRefresh = { dashboardViewModel.loadAgentCustomersList() },
+        onOpenRegister = {
+            isAgentCustomerListOpen = false
+            dashboardViewModel.openAgentCustomerRegister()
+        }
     )
 
     // Mini Public Profile Dialog
@@ -478,6 +510,7 @@ fun DashboardScreen(
     ExchangeDialog(
         isOpen = uiState.isExchangeDialogOpen,
         walletResponse = uiState.walletResponse,
+        exchangeRatesMap = uiState.exchangeRatesMap,
         fromCurrency = uiState.exchangeFromCurrency,
         toCurrency = uiState.exchangeToCurrency,
         amount = uiState.exchangeAmount,
@@ -1325,7 +1358,9 @@ private fun ToofanDashboardTab(
     val clipboardManager = LocalClipboardManager.current
 
     val natCode = walletResponse?.nationalCurrency?.code ?: "CDF"
-    val natBal = walletResponse?.balances?.fiat?.get(natCode) ?: 0.0
+    val natName = walletResponse?.nationalCurrency?.name ?: (if (natCode.contains("CDF")) "Franc Congolais" else if (natCode.contains("XOF") || natCode.contains("XAF")) "Franc CFA" else "Devise Nationale")
+    val natSymbol = walletResponse?.nationalCurrency?.symbol ?: (if (natCode == "CDF") "FC" else if (natCode.contains("XOF") || natCode.contains("XAF")) "CFA" else natCode)
+    val natBal = walletResponse?.balances?.fiat?.get(natCode) ?: (walletResponse?.balances?.fiat?.get("national") ?: 0.0)
 
     val usdBal = walletResponse?.balances?.fiat?.get("USD") ?: 0.0
     val eurBal = walletResponse?.balances?.fiat?.get("EUR") ?: 0.0
@@ -1452,7 +1487,7 @@ private fun ToofanDashboardTab(
                                             ) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Text(
-                                                        text = "Solde Devise Nationale",
+                                                        text = "Solde $natName ($natCode)",
                                                         fontFamily = MulishFontFamily,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 15.sp,
@@ -1492,7 +1527,7 @@ private fun ToofanDashboardTab(
                                             }
 
                                             Text(
-                                                text = if (uiState.isBalanceVisible) "${String.format("%,.2f", natBal)} FC" else "•••••••• FC",
+                                                text = if (uiState.isBalanceVisible) "${String.format("%,.2f", natBal)} $natSymbol" else "•••••••• $natSymbol",
                                                 fontFamily = MulishFontFamily,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 24.sp,

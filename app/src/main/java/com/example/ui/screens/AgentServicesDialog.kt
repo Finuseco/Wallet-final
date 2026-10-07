@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.ContentCopy
@@ -142,7 +143,9 @@ fun AgentServicesDialog(
     onLoanCurrencyChange: (String) -> Unit,
     onLoanPinChange: (String) -> Unit,
     onSubmitLoanRepay: () -> Unit,
-    onResetLoanRepay: () -> Unit
+    onResetLoanRepay: () -> Unit,
+    onOpenRegisterCustomer: () -> Unit = {},
+    onOpenCustomerList: () -> Unit = {}
 ) {
     if (!isOpen) return
 
@@ -301,6 +304,28 @@ fun AgentServicesDialog(
                                 icon = Icons.Default.SwapHoriz,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onOpenSweepDialog("USD") }
+                            )
+                        }
+
+                        // Ligne 3: Création de compte Client par l'Agent (Cahier des charges)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ToofanActionSquare(
+                                title = "Créer Compte\nClient (KYC)",
+                                bgColor = Color(0xFF10B981),
+                                icon = Icons.Default.PersonAdd,
+                                modifier = Modifier.weight(1.5f),
+                                onClick = onOpenRegisterCustomer
+                            )
+
+                            ToofanActionSquare(
+                                title = "Mes Clients\nParrainés",
+                                bgColor = Color(0xFF6366F1),
+                                icon = Icons.Default.Person,
+                                modifier = Modifier.weight(1.5f),
+                                onClick = onOpenCustomerList
                             )
                         }
                     }

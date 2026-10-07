@@ -180,6 +180,17 @@ data class DashboardUiState(
     val isExchangeLoading: Boolean = false,
     val exchangeError: String? = null,
     val exchangeSuccessResponse: com.example.data.model.ExchangeResponse? = null,
+    val exchangeRatesMap: Map<String, Double> = emptyMap(),
+    val isExchangeRatesLoading: Boolean = false,
+    // Agent Customer Registration (KYC Module)
+    val isAgentCustomerSheetOpen: Boolean = false,
+    val isAgentCustomerOptionsLoading: Boolean = false,
+    val agentCustomerOptions: com.example.data.model.AgentCustomerOptionsResponse? = null,
+    val agentCustomersList: List<com.example.data.model.AgentCustomerItemDto> = emptyList(),
+    val isLoadingAgentCustomers: Boolean = false,
+    val isAgentRegisteringCustomer: Boolean = false,
+    val agentCustomerRegisterSuccess: com.example.data.model.AgentRegisterCustomerResponse? = null,
+    val agentCustomerRegisterError: String? = null,
 
     val isForgotPinDialogOpen: Boolean = false,
     val forgotPinStep: Int = 1,
@@ -935,24 +946,17 @@ class DashboardViewModel(
             val isBtc = state.transferCurrency.uppercase() == "BTC"
             var targetRecipient = state.transferRecipient.trim()
 
-            // If not BTC, resolve profile by phone or wallet ID to get actual Wallet ID & Avatar
+            // If not BTC, resolve profile comprehensively by Wallet ID or phone
             if (!isBtc) {
-                val isPhone = state.transferSearchMode == "phone" || (targetRecipient.all { it.isDigit() || it == '+' || it == ' ' } && targetRecipient.filter { it.isDigit() }.length >= 8)
-                val profileRes = if (isPhone) {
-                    repository.searchProfileByPhone(targetRecipient)
-                } else {
-                    repository.searchProfileByWallet(targetRecipient)
-                }
-                profileRes.onSuccess { pubResp ->
-                    val profile = pubResp.profile
-                    if (profile != null) {
-                        targetRecipient = profile.walletId
-                        _uiState.update {
-                            it.copy(
-                                prefilledRecipient = profile,
-                                prefilledContactName = profile.fullName
-                            )
-                        }
+                val resolved = resolveProfile(targetRecipient).getOrNull()
+                val profile = resolved?.profile
+                if (profile != null) {
+                    targetRecipient = profile.walletId
+                    _uiState.update {
+                        it.copy(
+                            prefilledRecipient = profile,
+                            prefilledContactName = profile.fullName
+                        )
                     }
                 }
             }
@@ -2203,6 +2207,94 @@ class DashboardViewModel(
         _uiState.update { it.copy(agentActiveTab = tab) }
     }
 
+    // --- AGENT CUSTOMER ONBOARDING (KYC MODULE) ---
+    fun openAgentCustomerRegister() {
+        _uiState.update {
+            it.copy(
+                isAgentCustomerSheetOpen = true,
+                agentCustomerRegisterSuccess = null,
+                agentCustomerRegisterError = null
+            )
+        }
+        loadAgentCustomerOptions()
+    }
+
+    fun closeAgentCustomerRegister() {
+        _uiState.update {
+            it.copy(
+                isAgentCustomerSheetOpen = false,
+                agentCustomerRegisterError = null
+            )
+        }
+    }
+
+    fun loadAgentCustomerOptions() {
+        _uiState.update { it.copy(isAgentCustomerOptionsLoading = true) }
+        viewModelScope.launch {
+            val res = repository.getAgentCustomerOptions()
+            res.onSuccess { opts ->
+                _uiState.update {
+                    it.copy(
+                        isAgentCustomerOptionsLoading = false,
+                        agentCustomerOptions = opts
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentCustomerOptionsLoading = false,
+                        agentCustomerRegisterError = err.message
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadAgentCustomersList() {
+        _uiState.update { it.copy(isLoadingAgentCustomers = true) }
+        viewModelScope.launch {
+            val res = repository.getAgentCustomers()
+            res.onSuccess { listResp ->
+                _uiState.update {
+                    it.copy(
+                        isLoadingAgentCustomers = false,
+                        agentCustomersList = listResp.customers
+                    )
+                }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingAgentCustomers = false) }
+            }
+        }
+    }
+
+    fun registerAgentCustomer(
+        request: com.example.data.model.AgentRegisterCustomerRequest,
+        onSuccess: (com.example.data.model.AgentRegisterCustomerResponse) -> Unit = {}
+    ) {
+        _uiState.update { it.copy(isAgentRegisteringCustomer = true, agentCustomerRegisterError = null) }
+        viewModelScope.launch {
+            val res = repository.registerAgentCustomer(request)
+            res.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isAgentRegisteringCustomer = false,
+                        agentCustomerRegisterSuccess = resp,
+                        agentCustomerRegisterError = null
+                    )
+                }
+                onSuccess(resp)
+                loadAgentCustomersList()
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isAgentRegisteringCustomer = false,
+                        agentCustomerRegisterError = err.message ?: "Échec de l'enregistrement du client."
+                    )
+                }
+            }
+        }
+    }
+
     // --- BASCULER COMMISSION ---
     fun openSweepCommissionDialog(currency: String = "USD") {
         val available = when (currency.uppercase()) {
@@ -3242,9 +3334,28 @@ class DashboardViewModel(
     }
 
     // --- EXCHANGE / CONVERSION METHODS ---
+    fun fetchExchangeRates(countryCode: String? = null) {
+        val effectiveCode = countryCode ?: userProfile.value?.country ?: "CD"
+        _uiState.update { it.copy(isExchangeRatesLoading = true) }
+        viewModelScope.launch {
+            val result = repository.getExchangeRates(effectiveCode)
+            result.onSuccess { resp ->
+                _uiState.update {
+                    it.copy(
+                        isExchangeRatesLoading = false,
+                        exchangeRatesMap = resp.rates ?: emptyMap()
+                    )
+                }
+            }.onFailure {
+                _uiState.update { it.copy(isExchangeRatesLoading = false) }
+            }
+        }
+    }
+
     fun openExchangeDialog(from: String = "USD", to: String? = null) {
         val natCode = _uiState.value.walletResponse?.nationalCurrency?.code ?: "CDF"
         val targetTo = to ?: if (from == "USD") natCode else "USD"
+        fetchExchangeRates()
         _uiState.update {
             it.copy(
                 isExchangeDialogOpen = true,

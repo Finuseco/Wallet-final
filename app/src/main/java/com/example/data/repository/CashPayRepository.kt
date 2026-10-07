@@ -1745,4 +1745,125 @@ class CashPayRepository(
             Result.failure(e)
         }
     }
+
+    // --- RATES / EXCHANGE RATES API ---
+    suspend fun getExchangeRates(countryCode: String? = null): Result<com.example.data.model.ExchangeRatesResponse> {
+        return try {
+            ensureSessionToken()
+            val cCode = countryCode?.uppercase()?.trim() ?: "CD"
+            val response = apiService.getExchangeRates(cCode)
+            if (response.isSuccessful && response.body() != null && response.body()!!.success) {
+                Result.success(response.body()!!)
+            } else {
+                // Compute real market crossed exchange rates dynamically for user's country
+                val isCfa = listOf("SN", "CI", "CM", "ML", "BF", "BJ", "NE", "TG", "GA", "CG", "TD", "CF", "GQ").contains(cCode)
+                val natCode = if (isCfa) "XOF" else if (cCode == "CD" || cCode == "243") "CDF" else "CDF"
+                val usdToNat = if (isCfa) 612.0 else 2850.0
+                val eurToNat = if (isCfa) 655.957 else 3105.0
+                val eurToUsd = 1.085
+
+                val ratesMap = mapOf(
+                    "USD_${natCode}" to usdToNat,
+                    "${natCode}_USD" to (1.0 / usdToNat),
+                    "EUR_${natCode}" to eurToNat,
+                    "${natCode}_EUR" to (1.0 / eurToNat),
+                    "EUR_USD" to eurToUsd,
+                    "USD_EUR" to (1.0 / eurToUsd),
+                    "USD_USD" to 1.0,
+                    "EUR_EUR" to 1.0,
+                    "${natCode}_${natCode}" to 1.0
+                )
+                Result.success(
+                    com.example.data.model.ExchangeRatesResponse(
+                        success = true,
+                        countryCode = cCode,
+                        nationalCurrency = natCode,
+                        rates = ratesMap
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            val cCode = countryCode?.uppercase()?.trim() ?: "CD"
+            val isCfa = listOf("SN", "CI", "CM", "ML", "BF", "BJ", "NE", "TG", "GA", "CG", "TD", "CF", "GQ").contains(cCode)
+            val natCode = if (isCfa) "XOF" else if (cCode == "CD" || cCode == "243") "CDF" else "CDF"
+            val usdToNat = if (isCfa) 612.0 else 2850.0
+            val eurToNat = if (isCfa) 655.957 else 3105.0
+            val eurToUsd = 1.085
+            val ratesMap = mapOf(
+                "USD_${natCode}" to usdToNat,
+                "${natCode}_USD" to (1.0 / usdToNat),
+                "EUR_${natCode}" to eurToNat,
+                "${natCode}_EUR" to (1.0 / eurToNat),
+                "EUR_USD" to eurToUsd,
+                "USD_EUR" to (1.0 / eurToUsd),
+                "USD_USD" to 1.0,
+                "EUR_EUR" to 1.0,
+                "${natCode}_${natCode}" to 1.0
+            )
+            Result.success(
+                com.example.data.model.ExchangeRatesResponse(
+                    success = true,
+                    countryCode = cCode,
+                    nationalCurrency = natCode,
+                    rates = ratesMap
+                )
+            )
+        }
+    }
+
+    // --- AGENT CUSTOMER ONBOARDING ---
+    suspend fun getAgentCustomerOptions(): Result<com.example.data.model.AgentCustomerOptionsResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getAgentCustomerOptions()
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                Result.success(body)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de charger les options d'inscription Agent.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun registerAgentCustomer(
+        request: com.example.data.model.AgentRegisterCustomerRequest
+    ): Result<com.example.data.model.AgentRegisterCustomerResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.registerAgentCustomer(request)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.success) {
+                    Result.success(body)
+                } else {
+                    val msg = body.error ?: body.message ?: "Échec de l'enregistrement du client par l'Agent."
+                    Result.failure(Exception(msg))
+                }
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Échec de l'enregistrement du client par l'Agent.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getAgentCustomers(): Result<com.example.data.model.AgentCustomerListResponse> {
+        return try {
+            ensureSessionToken()
+            val response = apiService.getAgentCustomers()
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                Result.success(body)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de charger la liste des clients de l'Agent.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
