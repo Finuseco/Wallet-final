@@ -1022,6 +1022,7 @@ class DashboardViewModel(
                             name = prof.fullName,
                             phone = "",
                             normalizedPhone = "",
+                            lastNineDigits = "",
                             isCashPayUser = true,
                             publicProfile = prof
                         )
@@ -1115,6 +1116,7 @@ class DashboardViewModel(
             name = contactName,
             phone = "",
             normalizedPhone = "",
+            lastNineDigits = "",
             isCashPayUser = true,
             publicProfile = profile
         ))
@@ -1207,6 +1209,7 @@ class DashboardViewModel(
             name = profile.fullName,
             phone = _uiState.value.addContactPhone,
             normalizedPhone = _uiState.value.addContactPhone,
+            lastNineDigits = if (_uiState.value.addContactPhone.length >= 9) _uiState.value.addContactPhone.takeLast(9) else _uiState.value.addContactPhone,
             isCashPayUser = true,
             publicProfile = profile
         )
@@ -1249,6 +1252,7 @@ class DashboardViewModel(
                         name = name,
                         phone = rawPhone,
                         normalizedPhone = normalized,
+                        lastNineDigits = if (normalized.length >= 9) normalized.takeLast(9) else normalized,
                         isCashPayUser = false,
                         publicProfile = null
                     )
@@ -1262,16 +1266,16 @@ class DashboardViewModel(
                     )
                 }
 
-                // Concurrently resolve CashPay network status for top contacts without blocking display
-                val lookupBatch = allContacts.take(80)
+                // Concurrently resolve CashPay network status for top contacts in parallel batches
+                val lookupBatch = allContacts.take(200)
                 val resolvedMap = kotlinx.coroutines.coroutineScope {
                     lookupBatch.map { contact ->
                         async {
                             try {
-                                val searchResult = repository.searchProfileByPhone(contact.normalizedPhone)
+                                val searchResult = repository.searchProfileByPhone(contact.lastNineDigits)
                                 val profile = searchResult.getOrNull()
                                 if (profile != null && profile.success && profile.found && profile.profile != null) {
-                                    contact.normalizedPhone to profile.profile
+                                    contact.lastNineDigits to profile.profile
                                 } else null
                             } catch (_: Exception) {
                                 null
@@ -1282,7 +1286,7 @@ class DashboardViewModel(
 
                 if (resolvedMap.isNotEmpty()) {
                     val updatedList = allContacts.map { contact ->
-                        val matched = resolvedMap[contact.normalizedPhone]
+                        val matched = resolvedMap[contact.lastNineDigits]
                         if (matched != null) {
                             contact.copy(isCashPayUser = true, publicProfile = matched)
                         } else {
@@ -1316,6 +1320,29 @@ class DashboardViewModel(
                 isWithdrawalDialogOpen = true,
                 withdrawalType = "agent_cash",
                 withdrawalOperator = null,
+                withdrawalRecipient = "",
+                withdrawalAmount = "",
+                withdrawalCurrency = "USD",
+                withdrawalPreview = null,
+                isWithdrawalPreviewLoading = false,
+                withdrawalPreviewError = null,
+                isWithdrawalConfirmLoading = false,
+                withdrawalConfirmError = null,
+                withdrawalSuccess = false,
+                withdrawalStep = 1,
+                searchedAgentProfile = null,
+                isSearchingAgent = false,
+                agentSearchError = null
+            )
+        }
+    }
+
+    fun openWithdrawalExpress() {
+        _uiState.update {
+            it.copy(
+                isWithdrawalDialogOpen = true,
+                withdrawalType = "mobile_money",
+                withdrawalOperator = "MPESA",
                 withdrawalRecipient = "",
                 withdrawalAmount = "",
                 withdrawalCurrency = "USD",
@@ -3215,12 +3242,14 @@ class DashboardViewModel(
     }
 
     // --- EXCHANGE / CONVERSION METHODS ---
-    fun openExchangeDialog(from: String = "USD", to: String = "CDF") {
+    fun openExchangeDialog(from: String = "USD", to: String? = null) {
+        val natCode = _uiState.value.walletResponse?.nationalCurrency?.code ?: "CDF"
+        val targetTo = to ?: if (from == "USD") natCode else "USD"
         _uiState.update {
             it.copy(
                 isExchangeDialogOpen = true,
                 exchangeFromCurrency = from,
-                exchangeToCurrency = if (from == to) (if (from == "USD") "CDF" else "USD") else to,
+                exchangeToCurrency = if (from == targetTo) (if (from == "USD") natCode else "USD") else targetTo,
                 exchangeAmount = "",
                 exchangePin = "",
                 exchangeError = null,
@@ -3245,9 +3274,10 @@ class DashboardViewModel(
     }
 
     fun setExchangeFromCurrency(currency: String) {
+        val natCode = _uiState.value.walletResponse?.nationalCurrency?.code ?: "CDF"
         _uiState.update {
             val to = if (it.exchangeToCurrency == currency) {
-                if (currency == "USD") "CDF" else "USD"
+                if (currency == "USD") natCode else "USD"
             } else {
                 it.exchangeToCurrency
             }
@@ -3256,9 +3286,10 @@ class DashboardViewModel(
     }
 
     fun setExchangeToCurrency(currency: String) {
+        val natCode = _uiState.value.walletResponse?.nationalCurrency?.code ?: "CDF"
         _uiState.update {
             val from = if (it.exchangeFromCurrency == currency) {
-                if (currency == "USD") "CDF" else "USD"
+                if (currency == "USD") natCode else "USD"
             } else {
                 it.exchangeFromCurrency
             }

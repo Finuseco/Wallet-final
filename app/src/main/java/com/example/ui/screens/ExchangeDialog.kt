@@ -88,39 +88,38 @@ fun ExchangeDialog(
 ) {
     if (!isOpen) return
 
-    val availableCurrencies = remember { listOf("USD", "EUR", "NAT", "GBP", "BTC") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val nationalCode = walletResponse?.nationalCurrency?.code?.uppercase() ?: "CDF"
+    val availableCurrencies = remember(nationalCode) { listOf("USD", "EUR", nationalCode, "BTC") }
+    var btcWarningMessage by remember { mutableStateOf<String?>(null) }
     var showInfoDialog by remember { mutableStateOf(false) }
 
     // Source available balance
-    val availableSourceBalance = remember(walletResponse, fromCurrency) {
+    val availableSourceBalance = remember(walletResponse, fromCurrency, nationalCode) {
         val fiatMap = walletResponse?.balances?.fiat ?: emptyMap()
         val cryptoList = walletResponse?.balances?.crypto ?: emptyList()
         val code = fromCurrency.uppercase()
         when (code) {
             "USD" -> fiatMap["USD"] ?: 0.0
-            "CDF", "NAT" -> fiatMap["CDF"] ?: (fiatMap["national"] ?: 0.0)
             "EUR" -> fiatMap["EUR"] ?: 0.0
-            "GBP" -> fiatMap["GBP"] ?: 0.0
+            nationalCode -> fiatMap[nationalCode] ?: (fiatMap["CDF"] ?: (fiatMap["national"] ?: 0.0))
+            "CDF" -> fiatMap["CDF"] ?: (fiatMap["national"] ?: 0.0)
             "BTC" -> cryptoList.find { it.currency.uppercase() == "BTC" }?.balance ?: (walletResponse?.bitcoin?.balance ?: 0.0)
             else -> fiatMap[code] ?: 0.0
         }
     }
 
-    // Indicative exchange rate estimation
-    val indicativeRate = remember(fromCurrency, toCurrency) {
-        val from = fromCurrency.uppercase().let { if (it == "NAT") "CDF" else it }
-        val to = toCurrency.uppercase().let { if (it == "NAT") "CDF" else it }
+    // Indicative exchange rate estimation based on national currency
+    val indicativeRate = remember(fromCurrency, toCurrency, nationalCode) {
+        val from = fromCurrency.uppercase()
+        val to = toCurrency.uppercase()
         when {
-            from == "USD" && to == "CDF" -> 2800.0
-            from == "CDF" && to == "USD" -> 1.0 / 2800.0
+            from == "USD" && to == nationalCode -> if (nationalCode == "CDF") 2800.0 else 600.0
+            from == nationalCode && to == "USD" -> if (nationalCode == "CDF") (1.0 / 2800.0) else (1.0 / 600.0)
             from == "EUR" && to == "USD" -> 1.08
             from == "USD" && to == "EUR" -> 1.0 / 1.08
-            from == "EUR" && to == "CDF" -> 3024.0
-            from == "CDF" && to == "EUR" -> 1.0 / 3024.0
-            from == "GBP" && to == "USD" -> 1.28
-            from == "USD" && to == "GBP" -> 1.0 / 1.28
-            from == "BTC" && to == "USD" -> 64000.0
-            from == "USD" && to == "BTC" -> 1.0 / 64000.0
+            from == "EUR" && to == nationalCode -> if (nationalCode == "CDF") 3024.0 else 655.0
+            from == nationalCode && to == "EUR" -> if (nationalCode == "CDF") (1.0 / 3024.0) else (1.0 / 655.0)
             from == to -> 1.0
             else -> 1.0
         }
@@ -161,7 +160,7 @@ fun ExchangeDialog(
                         color = Color.White
                     )
                     Text(
-                        text = "L'Exchange CashPay vous permet de convertir vos fonds entre devises (USD, CDF, EUR, GBP, BTC) en temps réel, directement au sein de votre portefeuille.",
+                        text = "L'Exchange CashPay vous permet de convertir vos fonds entre devises (USD, EUR, $nationalCode) en temps réel, directement au sein de votre portefeuille.",
                         fontSize = 13.sp,
                         color = Color(0xFFCBD5E1),
                         lineHeight = 18.sp
@@ -282,6 +281,32 @@ fun ExchangeDialog(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // BTC Warning Notice if triggered
+                    btcWarningMessage?.let { warnMsg ->
+                        Surface(
+                            color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
+                                Text(
+                                    text = warnMsg,
+                                    fontFamily = MulishFontFamily,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFDE68A),
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
                     // Error banner if any
                     errorMessage?.let { msg ->
                         Surface(
@@ -342,28 +367,41 @@ fun ExchangeDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 availableCurrencies.forEach { curr ->
-                                    val isSelected = fromCurrency == curr || (fromCurrency == "CDF" && curr == "NAT")
-                                    val chipLabel = if (curr == "NAT") "Nat." else curr
+                                    val isSelected = fromCurrency == curr
+                                    val isBtc = curr == "BTC"
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(40.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isSelected) Color(0xFF00E676) else Color(0xFF0F172A))
+                                            .background(
+                                                if (isSelected) Color(0xFF00E676)
+                                                else if (isBtc) Color(0xFF0F172A).copy(alpha = 0.5f)
+                                                else Color(0xFF0F172A)
+                                            )
                                             .border(
                                                 1.5.dp,
-                                                if (isSelected) Color(0xFF00E676) else Color(0xFF334155),
+                                                if (isSelected) Color(0xFF00E676)
+                                                else if (isBtc) Color(0xFF475569).copy(alpha = 0.4f)
+                                                else Color(0xFF334155),
                                                 RoundedCornerShape(10.dp)
                                             )
-                                            .clickable { onFromCurrencyChange(if (curr == "NAT") "CDF" else curr) },
+                                            .clickable {
+                                                if (curr == "BTC") {
+                                                    btcWarningMessage = "La conversion pour le BTC n'est pas disponible pour le moment (taux en cours de configuration)."
+                                                } else {
+                                                    btcWarningMessage = null
+                                                    onFromCurrencyChange(curr)
+                                                }
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = chipLabel,
+                                            text = curr,
                                             fontFamily = MulishFontFamily,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (isSelected) Color(0xFF0B0F19) else Color.White
+                                            color = if (isSelected) Color(0xFF0B0F19) else if (isBtc) Color(0xFF64748B) else Color.White
                                         )
                                     }
                                 }
@@ -381,7 +419,11 @@ fun ExchangeDialog(
                                     .clip(CircleShape)
                                     .background(Color(0xFF0F172A))
                                     .border(1.5.dp, Color(0xFF00E676), CircleShape)
-                                    .clickable { onSwapCurrencies() }
+                                    .clickable {
+                                        if (fromCurrency != "BTC" && toCurrency != "BTC") {
+                                            onSwapCurrencies()
+                                        }
+                                    }
                                     .testTag("swap_currencies_btn"),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -425,28 +467,41 @@ fun ExchangeDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 availableCurrencies.forEach { curr ->
-                                    val isSelected = toCurrency == curr || (toCurrency == "CDF" && curr == "NAT")
-                                    val chipLabel = if (curr == "NAT") "Nat." else curr
+                                    val isSelected = toCurrency == curr
+                                    val isBtc = curr == "BTC"
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(40.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isSelected) Color(0xFF38BDF8) else Color(0xFF0F172A))
+                                            .background(
+                                                if (isSelected) Color(0xFF38BDF8)
+                                                else if (isBtc) Color(0xFF0F172A).copy(alpha = 0.5f)
+                                                else Color(0xFF0F172A)
+                                            )
                                             .border(
                                                 1.5.dp,
-                                                if (isSelected) Color(0xFF38BDF8) else Color(0xFF334155),
+                                                if (isSelected) Color(0xFF38BDF8)
+                                                else if (isBtc) Color(0xFF475569).copy(alpha = 0.4f)
+                                                else Color(0xFF334155),
                                                 RoundedCornerShape(10.dp)
                                             )
-                                            .clickable { onToCurrencyChange(if (curr == "NAT") "CDF" else curr) },
+                                            .clickable {
+                                                if (curr == "BTC") {
+                                                    btcWarningMessage = "La conversion vers le BTC n'est pas disponible pour le moment (taux en cours de configuration)."
+                                                } else {
+                                                    btcWarningMessage = null
+                                                    onToCurrencyChange(curr)
+                                                }
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = chipLabel,
+                                            text = curr,
                                             fontFamily = MulishFontFamily,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (isSelected) Color(0xFF0B0F19) else Color.White
+                                            color = if (isSelected) Color(0xFF0B0F19) else if (isBtc) Color(0xFF64748B) else Color.White
                                         )
                                     }
                                 }
@@ -536,7 +591,7 @@ fun ExchangeDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Taux indicatif :", fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
+                                Text("Taux configuré serveur :", fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
                                 Text(
                                     "1 $fromCurrency = ${formatRate(indicativeRate)} $toCurrency",
                                     fontSize = 12.sp,
@@ -608,7 +663,7 @@ fun ExchangeDialog(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     // Submit Conversion Button
-                    val isSubmitEnabled = parsedAmount > 0 && pin.length >= 4 && !isLoading
+                    val isSubmitEnabled = parsedAmount > 0 && pin.length >= 4 && !isLoading && fromCurrency != "BTC" && toCurrency != "BTC"
                     Button(
                         onClick = onSubmit,
                         enabled = isSubmitEnabled,

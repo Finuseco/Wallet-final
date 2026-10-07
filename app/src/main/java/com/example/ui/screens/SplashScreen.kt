@@ -56,7 +56,7 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     onAnimationFinished: () -> Unit
 ) {
-    val fullText = "CashPay"
+    val fullText = "CashPay All"
     var visibleLettersCount by remember { mutableIntStateOf(0) }
     val glowScale = remember { Animatable(0.7f) }
     val glowAlpha = remember { Animatable(0.2f) }
@@ -236,13 +236,14 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Subtitle
+            // Subtitle Slogan
             Text(
-                text = "Payer tout en espèces • All in Cash",
+                text = "Digital Financial ecosystem",
                 fontFamily = MulishFontFamily,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
                 color = ToofanGreen,
+                letterSpacing = 0.5.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(subtitleAlpha.value)
             )

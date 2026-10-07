@@ -241,7 +241,7 @@ fun DepositDialog(
                     "mobile_money" -> {
                         // Country & Operator Dropdown Option List
                         Text(
-                            text = "Opérateur Mobile Money ($countryDisplayName)",
+                            text = "Opérateur Mobile Money (RDC & International)",
                             color = Color(0xFFCBD5E1),
                             fontFamily = MulishFontFamily,
                             fontWeight = FontWeight.SemiBold,
@@ -271,31 +271,7 @@ fun DepositDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .background(
-                                                    when (currentOperatorObj) {
-                                                        MobileMoneyOperator.MPESA -> Color(0xFFE11D48)
-                                                        MobileMoneyOperator.ORANGE_MONEY -> Color(0xFFF97316)
-                                                        MobileMoneyOperator.AIRTEL_MONEY -> Color(0xFFDC2626)
-                                                        MobileMoneyOperator.AFRIMONEY -> Color(0xFF8B5CF6)
-                                                        MobileMoneyOperator.MTN_MOMO -> Color(0xFFEAB308)
-                                                        MobileMoneyOperator.WAVE -> Color(0xFF0284C7)
-                                                        MobileMoneyOperator.MOOV_MONEY -> Color(0xFF16A34A)
-                                                        else -> Color(0xFF2563EB)
-                                                    },
-                                                    CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = currentOperatorObj.displayName.take(1),
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                        }
+                                        OperatorLogo(operator = currentOperatorObj, size = 32.dp)
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
                                             text = currentOperatorObj.displayName,
@@ -317,23 +293,7 @@ fun DepositDialog(
                                     DropdownMenuItem(
                                         text = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(20.dp)
-                                                        .background(
-                                                            when (op) {
-                                                                MobileMoneyOperator.MPESA -> Color(0xFFE11D48)
-                                                                MobileMoneyOperator.ORANGE_MONEY -> Color(0xFFF97316)
-                                                                MobileMoneyOperator.AIRTEL_MONEY -> Color(0xFFDC2626)
-                                                                MobileMoneyOperator.AFRIMONEY -> Color(0xFF8B5CF6)
-                                                                MobileMoneyOperator.MTN_MOMO -> Color(0xFFEAB308)
-                                                                MobileMoneyOperator.WAVE -> Color(0xFF0284C7)
-                                                                MobileMoneyOperator.MOOV_MONEY -> Color(0xFF16A34A)
-                                                                else -> Color(0xFF2563EB)
-                                                            },
-                                                            CircleShape
-                                                        )
-                                                )
+                                                OperatorLogo(operator = op, size = 26.dp)
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Text(
                                                     text = op.displayName,
@@ -841,5 +801,31 @@ fun DepositDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun OperatorLogo(operator: com.example.data.model.MobileMoneyOperator, size: androidx.compose.ui.unit.Dp = 28.dp) {
+    val logoRes = when (operator) {
+        com.example.data.model.MobileMoneyOperator.MPESA -> com.example.R.drawable.logo_mpesa
+        com.example.data.model.MobileMoneyOperator.ORANGE_MONEY -> com.example.R.drawable.logo_orange_money
+        com.example.data.model.MobileMoneyOperator.AFRIMONEY -> com.example.R.drawable.afrimoney
+        com.example.data.model.MobileMoneyOperator.AIRTEL_MONEY -> com.example.R.drawable.logo_airtel_money
+        com.example.data.model.MobileMoneyOperator.MTN_MOMO -> com.example.R.drawable.logo_mtn_money
+    }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = Color.White,
+        modifier = Modifier.size(size)
+    ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = logoRes),
+            contentDescription = operator.displayName,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
     }
 }

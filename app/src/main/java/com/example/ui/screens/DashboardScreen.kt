@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
@@ -84,6 +86,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -253,6 +256,10 @@ fun DashboardScreen(
             onWithdraw = {
                 showActionPlusDialog = false
                 dashboardViewModel.openWithdrawalDialog()
+            },
+            onWithdrawExpress = {
+                showActionPlusDialog = false
+                dashboardViewModel.openWithdrawalExpress()
             },
             onDeposit = {
                 showActionPlusDialog = false
@@ -1351,6 +1358,7 @@ private fun ToofanDashboardTab(
                         name = name,
                         phone = "",
                         normalizedPhone = "",
+                        lastNineDigits = "",
                         isCashPayUser = true,
                         publicProfile = com.example.data.model.PublicProfileDto(
                             walletId = walletId ?: "",
@@ -2039,11 +2047,7 @@ private fun ToofanDashboardTab(
                         icon = Icons.Default.Add,
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            if (isAgentUser) {
-                                dashboardViewModel.openAgentServicesScreen(0)
-                            } else {
-                                dashboardViewModel.openDepositDialog()
-                            }
+                            dashboardViewModel.openDepositDialog()
                         }
                     )
                     ToofanActionSquare(
@@ -5283,13 +5287,25 @@ fun ContactsPageDialog(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFFF8FAFC)
+        color = Color(0xFF070F22)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF070F22),
+                            Color(0xFF0A1938),
+                            Color(0xFF030814)
+                        )
+                    )
+                )
+        ) {
             // Header Top Bar
             Surface(
-                color = Color.White,
-                shadowElevation = 2.dp,
+                color = Color(0xFF0F172A),
+                shadowElevation = 4.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -5298,39 +5314,91 @@ fun ContactsPageDialog(
                         .statusBarsPadding()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Retour", tint = Color(0xFF0F172A))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Retour", tint = Color.White)
+                        }
+                        Column {
+                            Text(
+                                text = "Contacts & Répertoire",
+                                fontFamily = MulishFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Détection automatique des comptes CashPay",
+                                fontFamily = MulishFontFamily,
+                                fontSize = 11.sp,
+                                color = Color(0xFF00C48C)
+                            )
+                        }
                     }
-                    Text(
-                        text = "Contacts",
-                        fontFamily = MulishFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = Color(0xFF0F172A)
-                    )
+
+                    // Button to manually add / verify a number or wallet
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF00C48C).copy(alpha = 0.2f),
+                        border = BorderStroke(1.dp, Color(0xFF00C48C)),
+                        modifier = Modifier.clickable {
+                            dashboardViewModel.openAddContactDialog()
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFF00C48C), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Ajouter",
+                                fontFamily = MulishFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color(0xFF00C48C)
+                            )
+                        }
+                    }
                 }
             }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Search Input
-                ToofanInputField(
+                // Search Input with Dark theme styling
+                OutlinedTextField(
                     value = uiState.searchContactQuery,
                     onValueChange = { dashboardViewModel.setContactSearchQuery(it) },
-                    placeholder = "Rechercher par nom ou numéro..."
+                    placeholder = { Text("Rechercher par nom, 9 chiffres ou Wallet ID...", color = Color(0xFF64748B), fontFamily = MulishFontFamily, fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF00C48C), modifier = Modifier.size(20.dp))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF00C48C),
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Color(0xFF1E293B),
+                        unfocusedContainerColor = Color(0xFF1E293B)
+                    ),
+                    shape = RoundedCornerShape(14.dp)
                 )
 
                 if (!hasContactPermission) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color.White,
-                        shadowElevation = 2.dp,
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFF0F172A),
+                        border = BorderStroke(1.dp, Color(0xFF334155)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -5340,7 +5408,7 @@ fun ContactsPageDialog(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFF00C48C).copy(alpha = 0.12f),
+                                color = Color(0xFF00C48C).copy(alpha = 0.15f),
                                 modifier = Modifier.size(60.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -5357,22 +5425,31 @@ fun ContactsPageDialog(
                                 fontFamily = MulishFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = Color(0xFF0F172A)
+                                color = Color.White
                             )
                             Text(
-                                text = "CashPay souhaite accéder à vos contacts afin de trouver vos correspondants et vous permettre d'envoyer de l'argent plus facilement.",
+                                text = "CashPay analyse automatiquement les 9 derniers chiffres de vos contacts pour détecter instantanément ceux qui possèdent déjà un compte CashPay.",
                                 fontFamily = MulishFontFamily,
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.Center,
-                                color = Color(0xFF64748B)
+                                color = Color(0xFF94A3B8)
                             )
-                            ToofanButton(
-                                title = "Autoriser l'accès aux contacts",
+                            Button(
                                 onClick = {
                                     permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
                                 },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C48C)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Autoriser l'accès aux contacts",
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A),
+                                    fontSize = 14.sp
+                                )
+                            }
                         }
                     }
                 } else if (uiState.isLoadingContacts) {
@@ -5382,23 +5459,54 @@ fun ContactsPageDialog(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Color(0xFF00C48C))
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "Synchronisation des contacts CashPay...",
+                                text = "Recherche en temps réel des comptes CashPay...",
                                 fontFamily = MulishFontFamily,
                                 fontSize = 13.sp,
-                                color = Color(0xFF64748B)
+                                color = Color(0xFF00C48C),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Analyse des 9 derniers chiffres des contacts",
+                                fontFamily = MulishFontFamily,
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8)
                             )
                         }
                     }
                 } else {
                     val filtered = remember(uiState.contactsList, uiState.searchContactQuery) {
                         if (uiState.searchContactQuery.isBlank()) uiState.contactsList else {
+                            val q = uiState.searchContactQuery.trim().lowercase()
+                            val qDigits = q.filter { it.isDigit() }
                             uiState.contactsList.filter {
-                                it.name.contains(uiState.searchContactQuery, ignoreCase = true) ||
-                                        it.phone.contains(uiState.searchContactQuery)
+                                it.name.lowercase().contains(q) ||
+                                        it.phone.contains(q) ||
+                                        (qDigits.isNotBlank() && it.lastNineDigits.contains(qDigits)) ||
+                                        (it.publicProfile?.walletId?.lowercase()?.contains(q) == true)
                             }
                         }
+                    }
+
+                    var selectedProfileContact by remember { mutableStateOf<com.example.data.model.PhoneContact?>(null) }
+
+                    selectedProfileContact?.let { contact ->
+                        MiniPublicProfileDialog(
+                            contact = contact,
+                            onDismiss = { selectedProfileContact = null },
+                            onSendMoney = {
+                                selectedProfileContact = null
+                                onDismiss()
+                                if (contact.publicProfile != null) {
+                                    dashboardViewModel.triggerPrefilledTransfer(contact.name, contact.publicProfile)
+                                } else {
+                                    dashboardViewModel.onRecipientChanged(contact.name)
+                                    dashboardViewModel.openTransferDialog()
+                                }
+                            }
+                        )
                     }
 
                     val cashPayContacts = filtered.filter { it.isCashPayUser }
@@ -5407,22 +5515,37 @@ fun ContactsPageDialog(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 20.dp)
+                        contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         if (cashPayContacts.isNotEmpty()) {
                             item {
-                                Text(
-                                    text = "Contacts CashPay (${cashPayContacts.size})",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF00C48C),
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "⭐ Comptes CashPay Détectés (${cashPayContacts.size})",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF00C48C)
+                                    )
+                                    Text(
+                                        text = "Actifs",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF38BDF8),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                             items(cashPayContacts) { contact ->
                                 ContactItemCard(
                                     contact = contact,
+                                    onViewProfileClick = {
+                                        selectedProfileContact = contact
+                                    },
                                     onSendClick = {
                                         onDismiss()
                                         if (contact.publicProfile != null) {
@@ -5443,12 +5566,14 @@ fun ContactsPageDialog(
                                     fontFamily = MulishFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
-                                    color = Color(0xFF64748B),
-                                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                                    color = Color(0xFF94A3B8),
+                                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                                 )
                             }
                             items(otherContacts) { contact ->
-                                OtherContactItemCard(contact = contact)
+                                OtherContactItemCard(
+                                    contact = contact
+                                )
                             }
                         }
 
@@ -5460,12 +5585,24 @@ fun ContactsPageDialog(
                                         .padding(top = 40.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "Aucun contact trouvé",
-                                        fontFamily = MulishFontFamily,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF94A3B8)
-                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(48.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Aucun contact correspondant",
+                                            fontFamily = MulishFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            color = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Utilisez le bouton Ajouter pour rechercher manuellement",
+                                            fontFamily = MulishFontFamily,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -5479,30 +5616,34 @@ fun ContactsPageDialog(
 @Composable
 private fun ContactItemCard(
     contact: com.example.data.model.PhoneContact,
+    onViewProfileClick: () -> Unit,
     onSendClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0B1228),
+        shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onViewProfileClick),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFF1F5F9))
+                        .background(Color(0xFF1E293B))
                         .border(1.5.dp, Color(0xFF00C48C), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -5520,7 +5661,7 @@ private fun ContactItemCard(
                             fontFamily = MulishFontFamily,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF00C48C),
-                            fontSize = 14.sp
+                            fontSize = 16.sp
                         )
                     }
                 }
@@ -5531,38 +5672,40 @@ private fun ContactItemCard(
                             text = contact.name,
                             fontFamily = MulishFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF0F172A)
+                            fontSize = 15.sp,
+                            color = Color.White
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Vérifié",
-                            tint = Color(0xFF00C48C),
-                            modifier = Modifier.size(13.dp)
-                        )
+                        if (contact.isCashPayUser) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Vérifié",
+                                tint = Color(0xFF00C48C),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                     Text(
                         text = "ID : ${contact.publicProfile?.walletId ?: contact.phone}",
                         fontFamily = MulishFontFamily,
                         fontSize = 12.sp,
-                        color = Color(0xFF64748B)
+                        color = Color(0xFF94A3B8)
                     )
                 }
             }
 
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFF00C48C),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF00C48C).copy(alpha = 0.2f),
                 modifier = Modifier.clickable(onClick = onSendClick)
             ) {
                 Text(
                     text = "Envoyer",
-                    color = Color.White,
+                    color = Color(0xFF00C48C),
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
         }
@@ -5575,34 +5718,34 @@ private fun OtherContactItemCard(
 ) {
     val context = LocalContext.current
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        shadowElevation = 0.5.dp,
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0B1228),
+        shadowElevation = 1.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFF1F5F9),
-                    modifier = Modifier.size(40.dp)
+                    color = Color(0xFF1E293B),
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = contact.name.take(2).uppercase(),
                             fontFamily = MulishFontFamily,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF64748B),
-                            fontSize = 13.sp
+                            color = Color(0xFF94A3B8),
+                            fontSize = 16.sp
                         )
                     }
                 }
@@ -5612,8 +5755,8 @@ private fun OtherContactItemCard(
                         text = contact.name,
                         fontFamily = MulishFontFamily,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        color = Color(0xFF0F172A)
+                        fontSize = 15.sp,
+                        color = Color.White
                     )
                     Text(
                         text = contact.phone,
@@ -5623,21 +5766,20 @@ private fun OtherContactItemCard(
                     )
                 }
             }
-
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFFF1F5F9),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF3B82F6).copy(alpha = 0.2f),
                 modifier = Modifier.clickable {
                     Toast.makeText(context, "Invitation CashPay envoyée à ${contact.name}", Toast.LENGTH_SHORT).show()
                 }
             ) {
                 Text(
                     text = "Inviter",
-                    color = Color(0xFF2563EB),
+                    color = Color(0xFF3B82F6),
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }
         }
@@ -5737,6 +5879,7 @@ fun ActionPlusModalDialog(
     onReceiveQr: () -> Unit,
     onPayPos: () -> Unit,
     onWithdraw: () -> Unit,
+    onWithdrawExpress: () -> Unit = {},
     onDeposit: () -> Unit = {},
     onExchange: () -> Unit = {},
     // Agent actions
@@ -5750,64 +5893,108 @@ fun ActionPlusModalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFFFF5B37).copy(alpha = 0.15f),
-                    modifier = Modifier.size(36.dp)
+                    color = Color(0xFF00C48C).copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, Color(0xFF00C48C)),
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.Add,
+                            imageVector = Icons.Default.Add,
                             contentDescription = null,
-                            tint = Color(0xFFFF5B37),
-                            modifier = Modifier.size(20.dp)
+                            tint = Color(0xFF00C48C),
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
                 Text(
-                    text = if (isAgent) "Menu Agent CashPay" else "Actions Rapides CashPay",
+                    text = if (isAgent) "Menu Agent CashPay" else "Actions Rapides",
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    color = Color(0xFF0F172A)
+                    fontSize = 20.sp,
+                    color = Color.White
                 )
             }
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = if (isAgent) "Services opérationnels pour agents agréés :" else "Choisissez l'opération que vous souhaitez effectuer :",
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontFamily = MulishFontFamily,
-                    color = Color(0xFF64748B)
+                    color = Color(0xFF94A3B8),
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-
                 if (isAgent) {
+                    Text(
+                        text = "SERVICES CLIENT & PORTEFEUILLE",
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color(0xFF00C48C),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    ActionPlusTile(
+                        title = "Recharger mon Compte",
+                        subtitle = "Mobile Money, Carte bancaire ou PayPal",
+                        icon = Icons.Default.Add,
+                        iconBg = Color(0xFF10B981),
+                        onClick = onDeposit
+                    )
+                    ActionPlusTile(
+                        title = "Retrait Express",
+                        subtitle = "Vers M-Pesa, Orange, Afrimoney, Airtel, MTN",
+                        icon = Icons.Default.PhoneAndroid,
+                        iconBg = Color(0xFFFF6600),
+                        onClick = onWithdrawExpress
+                    )
+                    ActionPlusTile(
+                        title = "Change de Devises",
+                        subtitle = "Convertir USD, CDF, EUR instantanément",
+                        icon = Icons.Default.CurrencyExchange,
+                        iconBg = Color(0xFF00E5FF),
+                        onClick = onExchange
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "SERVICES OPÉRATIONNELS AGENT",
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color(0xFF38BDF8),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                     // Agent Actions
                     ActionPlusTile(
                         title = "Dépôt Espèces Client",
-                        subtitle = "Effectuer un dépôt sur le compte d'un client CashPay",
+                        subtitle = "Effectuer un dépôt sur le compte d'un client",
                         icon = Icons.Default.ArrowDownward,
                         iconBg = Color(0xFF059669),
                         onClick = onAgentDeposit
                     )
                     ActionPlusTile(
-                        title = "Retrait Mobile Money Direct (SIM)",
-                        subtitle = "Débiter la carte SIM du client (M-Pesa, Orange, Airtel, MTN)",
+                        title = "Retrait Mobile Money Direct",
+                        subtitle = "Débiter la carte SIM du client (M-Pesa, Orange, etc.)",
                         icon = Icons.Default.PhoneAndroid,
                         iconBg = Color(0xFFFF6600),
                         onClick = onAgentExternalMoMo
                     )
                     ActionPlusTile(
-                        title = "Retrait Espèces Client (OTP)",
+                        title = "Retrait Espèces Client",
                         subtitle = "Initier un retrait pour un client CashPay",
                         icon = Icons.Default.ArrowUpward,
                         iconBg = Color(0xFFEA580C),
@@ -5830,53 +6017,56 @@ fun ActionPlusModalDialog(
                 } else {
                     // Standard Client Actions
                     ActionPlusTile(
-                        title = "Recharger mon Compte (Dépôt)",
-                        subtitle = "Mobile Money, Carte bancaire ou PayPal via MaxiCash",
+                        title = "Recharger mon Compte",
+                        subtitle = "Mobile Money, Carte bancaire ou PayPal",
                         icon = Icons.Default.Add,
                         iconBg = Color(0xFF10B981),
                         onClick = onDeposit
                     )
                     ActionPlusTile(
-                        title = "Change de Devises (Exchange)",
+                        title = "Change de Devises",
                         subtitle = "Convertir USD, CDF, EUR instantanément",
-                        icon = Icons.Default.Payments,
+                        icon = Icons.Default.CurrencyExchange,
                         iconBg = Color(0xFF00E5FF),
                         onClick = onExchange
                     )
                     ActionPlusTile(
-                        title = "Envoyer de l'argent",
-                        subtitle = "Scanner un QR Code ou entrer un Wallet ID / N°",
-                        icon = Icons.Default.Send,
-                        iconBg = Color(0xFF00C48C),
-                        onClick = onSendScan
+                        title = "Retrait Express",
+                        subtitle = "Vers M-Pesa, Orange, Afrimoney, Airtel, MTN",
+                        icon = Icons.Default.PhoneAndroid,
+                        iconBg = Color(0xFFFF6600),
+                        onClick = onWithdrawExpress
                     )
                     ActionPlusTile(
-                        title = "Recevoir des fonds",
-                        subtitle = "Afficher mon QR Code & mon Wallet ID",
-                        icon = Icons.Default.QrCode,
-                        iconBg = Color(0xFF55ACEE),
-                        onClick = onReceiveQr
-                    )
-                    ActionPlusTile(
-                        title = "Paiement Commerçant / POS",
-                        subtitle = "Scanner le QR Code d'un point de vente",
-                        icon = Icons.Default.ShoppingCart,
-                        iconBg = Color(0xFFFF8A71),
-                        onClick = onPayPos
-                    )
-                    ActionPlusTile(
-                        title = "Retrait Agent CashPay",
+                        title = "Retrait Cash (Agent)",
                         subtitle = "Retirer du cash auprès d'un agent agréé",
                         icon = Icons.Default.AccountBalanceWallet,
                         iconBg = Color(0xFF7C3AED),
                         onClick = onWithdraw
                     )
+                    ActionPlusTile(
+                        title = "Envoyer de l'argent",
+                        subtitle = "QR Code, Wallet ID ou N°",
+                        icon = Icons.Default.Send,
+                        iconBg = Color(0xFF00C48C),
+                        onClick = onSendScan
+                    )
+                    ActionPlusTile(
+                        title = "Paiement Commerçant",
+                        subtitle = "Scanner le QR Code d'un point de vente",
+                        icon = Icons.Default.ShoppingCart,
+                        iconBg = Color(0xFFFF8A71),
+                        onClick = onPayPos
+                    )
                 }
+                Spacer(modifier = Modifier.height(10.dp))
             }
         },
+        containerColor = Color(0xFF070F22),
+        shape = RoundedCornerShape(24.dp),
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Fermer", fontFamily = MulishFontFamily, color = Color(0xFF64748B))
+            TextButton(onClick = onDismiss, modifier = Modifier.padding(bottom = 8.dp)) {
+                Text("Fermer", fontFamily = MulishFontFamily, color = Color(0xFF00C48C), fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     )
@@ -6370,7 +6560,8 @@ fun MiniPublicProfileDialog(
 private fun ActionPlusTile(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    logoRes: Int? = null,
     iconBg: Color,
     onClick: () -> Unit
 ) {
@@ -6379,26 +6570,36 @@ private fun ActionPlusTile(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        color = Color(0xFFF8FAFC),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+        color = Color(0xFF1E293B),
+        border = BorderStroke(1.dp, Color(0xFF334155))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
                 shape = CircleShape,
-                color = iconBg.copy(alpha = 0.15f),
-                modifier = Modifier.size(40.dp)
+                color = iconBg.copy(alpha = 0.2f),
+                border = BorderStroke(1.dp, iconBg.copy(alpha = 0.5f)),
+                modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconBg,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (logoRes != null) {
+                        Image(
+                            painter = painterResource(id = logoRes),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            contentScale = ContentScale.Inside
+                        )
+                    } else if (icon != null) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconBg,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -6407,17 +6608,18 @@ private fun ActionPlusTile(
                     fontFamily = MulishFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = Color(0xFF0F172A)
+                    color = Color.White
                 )
                 Text(
                     text = subtitle,
                     fontFamily = MulishFontFamily,
                     fontSize = 11.sp,
-                    color = Color(0xFF64748B)
+                    color = Color(0xFF94A3B8),
+                    lineHeight = 15.sp
                 )
             }
             Icon(
-                imageVector = Icons.Default.ArrowForward,
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
                 tint = Color(0xFF94A3B8),
                 modifier = Modifier.size(16.dp)

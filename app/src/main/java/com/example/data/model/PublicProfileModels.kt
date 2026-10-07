@@ -45,6 +45,7 @@ data class PhoneContact(
     val name: String,
     val phone: String,
     val normalizedPhone: String,
+    val lastNineDigits: String,
     val isCashPayUser: Boolean = false,
     val publicProfile: PublicProfileDto? = null
 )

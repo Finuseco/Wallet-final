@@ -889,17 +889,40 @@ class CashPayRepository(
         return try {
             val digits = phone.filter { it.isDigit() }
             val queryPhone = if (digits.length >= 9) digits.takeLast(9) else digits
-            var response = apiService.searchProfileByPhone(queryPhone)
-            if (!response.isSuccessful || response.body()?.found != true) {
-                if (queryPhone.length == 9) {
-                    val resp243 = apiService.searchProfileByPhone("243$queryPhone")
-                    if (resp243.isSuccessful && resp243.body()?.found == true) {
-                        response = resp243
-                    }
-                }
+            val candidates = mutableListOf<String>()
+            if (digits.isNotBlank()) {
+                candidates.add(digits)
+                candidates.add("+$digits")
             }
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
+            if (queryPhone.length == 9) {
+                candidates.add("243$queryPhone")
+                candidates.add("+243$queryPhone")
+                candidates.add(queryPhone)
+                candidates.add("0$queryPhone")
+            }
+
+            var matchedResponse: retrofit2.Response<com.example.data.model.PublicProfileResponse>? = null
+            for (candidate in candidates.distinct()) {
+                try {
+                    val resp = apiService.searchProfileByPhone(candidate)
+                    if (resp.isSuccessful && resp.body()?.found == true && resp.body()?.profile != null) {
+                        matchedResponse = resp
+                        break
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (matchedResponse == null && digits.isNotBlank()) {
+                try {
+                    val searchResp = apiService.searchProfile(digits)
+                    if (searchResp.isSuccessful && searchResp.body()?.found == true && searchResp.body()?.profile != null) {
+                        matchedResponse = searchResp
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (matchedResponse != null && matchedResponse.isSuccessful && matchedResponse.body() != null) {
+                val body = matchedResponse.body()!!
                 val profile = body.profile
                 val resolvedProfile = if (profile != null) {
                     val photo = profile.profilePhotoUrl ?: profile.profilePhoto
@@ -913,8 +936,7 @@ class CashPayRepository(
                 } else null
                 Result.success(body.copy(profile = resolvedProfile))
             } else {
-                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de rechercher le profil public")
-                Result.failure(Exception(msg))
+                Result.failure(Exception("Profil introuvable pour $phone"))
             }
         } catch (e: Exception) {
             Result.failure(e)

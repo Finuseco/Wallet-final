@@ -455,6 +455,51 @@ fun SubTabActiveLoan(
                     }
                 }
 
+                if (loan.repayments.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Historique des paiements",
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ToofanMainDark
+                        )
+                    }
+                    items(loan.repayments) { rep ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = ToofanWhite,
+                            border = BorderStroke(1.dp, ToofanGrey1.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Surface(shape = CircleShape, color = ToofanGreen.copy(alpha = 0.1f), modifier = Modifier.size(32.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = ToofanGreen, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                    Column {
+                                        Text(text = "Remboursement", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ToofanMainDark)
+                                        Text(text = rep.date ?: "-", fontSize = 10.sp, color = ToofanBodyText)
+                                    }
+                                }
+                                Text(
+                                    text = "- ${String.format("%.2f", rep.amount)} ${loan.currency}",
+                                    fontFamily = MulishFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFF4868)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (loan.schedule.isNotEmpty()) {
                     item {
                         Text(

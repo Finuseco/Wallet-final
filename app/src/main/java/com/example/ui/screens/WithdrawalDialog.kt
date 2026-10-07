@@ -343,6 +343,7 @@ fun StepSelectTypeAndRecipient(
                 val operators = listOf(
                     Triple("MPESA", R.drawable.logo_mpesa, "M-Pesa"),
                     Triple("ORANGE", R.drawable.logo_orange_money, "Orange"),
+                    Triple("AFRI", R.drawable.afrimoney, "Afrimoney"),
                     Triple("AIRTEL", R.drawable.logo_airtel_money, "Airtel"),
                     Triple("MTN", R.drawable.logo_mtn_money, "MTN")
                 )
