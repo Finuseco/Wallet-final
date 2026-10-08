@@ -31,11 +31,13 @@ object ApiClient {
         val builder = original.newBuilder()
 
         val token = sessionToken ?: tokenProvider?.invoke()
+        builder.addHeader("Accept", "application/json")
+        builder.addHeader("User-Agent", "CashPay-Android/2.0")
         if (!token.isNullOrBlank()) {
             if (sessionToken == null) {
                 sessionToken = token
             }
-            builder.addHeader("Cookie", "cashpay-token=$token")
+            builder.addHeader("Cookie", "cashpay-token=$token; token=$token")
             builder.addHeader("cashpay-token", token)
             builder.addHeader("Authorization", "Bearer $token")
         }
@@ -50,6 +52,11 @@ object ApiClient {
                 if (extracted.isNotBlank()) {
                     sessionToken = extracted
                 }
+            } else if (cookie.contains("token=")) {
+                val extracted = cookie.substringAfter("token=").substringBefore(";")
+                if (extracted.isNotBlank() && sessionToken == null) {
+                    sessionToken = extracted
+                }
             }
         }
 
@@ -59,9 +66,10 @@ object ApiClient {
     val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(45, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     val apiService: CashPayApiService by lazy {

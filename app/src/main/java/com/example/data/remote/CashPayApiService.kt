@@ -331,7 +331,10 @@ interface CashPayApiService {
 
     // --- AGENT CUSTOMER ONBOARDING (Cahier des charges) ---
     @GET("api/v1/agents/customers/options")
-    suspend fun getAgentCustomerOptions(): Response<com.example.data.model.AgentCustomerOptionsResponse>
+    suspend fun getAgentCustomerOptions(
+        @Query("country") country: String? = null,
+        @Query("countryCode") countryCode: String? = null
+    ): Response<com.example.data.model.AgentCustomerOptionsResponse>
 
     @POST("api/v1/agents/customers/register")
     suspend fun registerAgentCustomer(

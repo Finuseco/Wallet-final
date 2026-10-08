@@ -43,9 +43,7 @@ class CashPayRepository(
 
     init {
         com.example.data.remote.ApiClient.tokenProvider = {
-            kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                dao.getSessionOnce()?.sessionToken
-            }
+            com.example.data.remote.ApiClient.sessionToken
         }
     }
 
@@ -1912,12 +1910,12 @@ class CashPayRepository(
         }
     }
 
-    // --- AGENT CUSTOMER ONBOARDING ---
-    suspend fun getAgentCustomerOptions(): Result<com.example.data.model.AgentCustomerOptionsResponse> {
+    // --- AGENT CUSTOMER ONBOARDING (Cahier des charges) ---
+    suspend fun getAgentCustomerOptions(country: String? = null): Result<com.example.data.model.AgentCustomerOptionsResponse> {
         return kotlinx.coroutines.withContext(Dispatchers.IO) {
             try {
                 ensureSessionToken()
-                val response = apiService.getAgentCustomerOptions()
+                val response = apiService.getAgentCustomerOptions(country = country, countryCode = country)
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     Result.success(body)
@@ -1927,7 +1925,12 @@ class CashPayRepository(
                     Result.failure(Exception(msg))
                 }
             } catch (e: Exception) {
-                Result.failure(e)
+                val errorMsg = when (e) {
+                    is java.net.SocketTimeoutException -> "Délai d'attente dépassé (Timeout). Le serveur met trop de temps à répondre, veuillez réessayer."
+                    is java.net.UnknownHostException -> "Serveur inaccessible. Veuillez vérifier votre connexion Internet."
+                    else -> e.message ?: "Erreur de connexion au serveur CashPay."
+                }
+                Result.failure(Exception(errorMsg, e))
             }
         }
     }
@@ -1935,23 +1938,30 @@ class CashPayRepository(
     suspend fun registerAgentCustomer(
         request: com.example.data.model.AgentRegisterCustomerRequest
     ): Result<com.example.data.model.AgentRegisterCustomerResponse> {
-        return try {
-            ensureSessionToken()
-            val response = apiService.registerAgentCustomer(request)
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                if (body.success) {
-                    Result.success(body)
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val response = apiService.registerAgentCustomer(request)
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    if (body.success || body.customer != null || body.error == null) {
+                        Result.success(body)
+                    } else {
+                        val msg = body.error ?: body.message ?: "Échec de l'enregistrement du client par l'Agent."
+                        Result.failure(Exception(msg))
+                    }
                 } else {
-                    val msg = body.error ?: body.message ?: "Échec de l'enregistrement du client par l'Agent."
+                    val msg = extractErrorMessage(response.errorBody()?.string(), "Échec de l'enregistrement du client par l'Agent (${response.code()}).")
                     Result.failure(Exception(msg))
                 }
-            } else {
-                val msg = extractErrorMessage(response.errorBody()?.string(), "Échec de l'enregistrement du client par l'Agent.")
-                Result.failure(Exception(msg))
+            } catch (e: Exception) {
+                val errorMsg = when (e) {
+                    is java.net.SocketTimeoutException -> "Délai d'attente dépassé (Timeout). Veuillez vérifier votre connexion et réessayer."
+                    is java.net.UnknownHostException -> "Serveur inaccessible. Veuillez vérifier votre connexion Internet."
+                    else -> e.message ?: "Erreur lors de l'enregistrement du client."
+                }
+                Result.failure(Exception(errorMsg, e))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 

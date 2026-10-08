@@ -206,6 +206,11 @@ fun Any?.asOptionString(): String {
     return this.toString()
 }
 
+data class AgentProvinceItem(
+    val code: String,
+    val name: String
+)
+
 @JsonClass(generateAdapter = true)
 data class AgentCountryOptionDto(
     @Json(name = "code") val code: String? = null,
@@ -233,12 +238,37 @@ data class AgentCustomerOptionsMap(
 
 @JsonClass(generateAdapter = true)
 data class AgentCustomerOptionsResponse(
-    @Json(name = "success") val success: Boolean = false,
+    @Json(name = "success") val success: Boolean? = true,
     @Json(name = "country") val country: AgentCountryOptionDto? = null,
-    @Json(name = "provinces") val provinces: List<AgentProvinceOptionDto> = emptyList(),
+    @Json(name = "provinces") val provinces: List<Any>? = emptyList(),
+    @Json(name = "account_type") val accountType: List<Any>? = null,
     @Json(name = "options") val options: AgentCustomerOptionsMap? = null,
     @Json(name = "error") val error: String? = null
-)
+) {
+    fun getNormalizedProvinces(): List<AgentProvinceItem> {
+        val raw = provinces ?: emptyList()
+        return raw.mapNotNull { item ->
+            when (item) {
+                is Map<*, *> -> {
+                    val n = item["name"]?.toString() ?: item["label"]?.toString() ?: item["value"]?.toString()
+                    val c = item["code"]?.toString() ?: item["id"]?.toString() ?: n
+                    if (!n.isNullOrBlank()) AgentProvinceItem(code = c ?: n, name = n) else null
+                }
+                is String -> {
+                    if (item.isNotBlank()) AgentProvinceItem(code = item, name = item) else null
+                }
+                else -> null
+            }
+        }
+    }
+
+    fun getAccountTypes(): List<String> {
+        val rootList = accountType?.mapNotNull { it.asOptionString().ifBlank { null } }
+        val mapList = options?.accountType?.mapNotNull { it.asOptionString().ifBlank { null } }
+        val combined = (rootList ?: mapList ?: emptyList()).filter { it.isNotBlank() }
+        return if (combined.isNotEmpty()) combined else listOf("national", "diaspora", "business")
+    }
+}
 
 @JsonClass(generateAdapter = true)
 data class AgentCustomerRepresentativeDto(
@@ -252,32 +282,35 @@ data class AgentRegisterCustomerRequest(
     @Json(name = "account_type") val accountType: String = "national",
     @Json(name = "first_name") val firstName: String,
     @Json(name = "last_name") val lastName: String,
-    @Json(name = "middle_name") val middleName: String? = null,
-    @Json(name = "gender") val gender: String, // "male", "female", "other"
-    @Json(name = "marital_status") val maritalStatus: String, // "single", "married", "divorced", "widowed"
-    @Json(name = "birth_date") val birthDate: String, // "YYYY-MM-DD"
-    @Json(name = "birth_place") val birthPlace: String,
-    @Json(name = "email") val email: String? = null,
-    @Json(name = "phone") val phone: String, // normalized, e.g. "243833248614"
+    @Json(name = "full_name") val fullName: String? = null,
+    @Json(name = "phone") val phone: String, // normalized with country prefix or raw
     @Json(name = "province") val province: String,
-    @Json(name = "city") val city: String,
-    @Json(name = "address") val address: String,
-    @Json(name = "id_type") val idType: String, // "national_id", "passport", "driver_license"
-    @Json(name = "id_number") val idNumber: String,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "country_code") val countryCode: String? = null,
+    @Json(name = "email") val email: String? = null,
+    @Json(name = "middle_name") val middleName: String? = null,
+    @Json(name = "gender") val gender: String? = null,
+    @Json(name = "marital_status") val maritalStatus: String? = null,
+    @Json(name = "birth_date") val birthDate: String? = null,
+    @Json(name = "birth_place") val birthPlace: String? = null,
+    @Json(name = "city") val city: String? = null,
+    @Json(name = "address") val address: String? = null,
+    @Json(name = "id_type") val idType: String? = null,
+    @Json(name = "id_number") val idNumber: String? = null,
     @Json(name = "id_issued_date") val idIssuedDate: String? = null,
     @Json(name = "id_expiry_date") val idExpiryDate: String? = null,
-    @Json(name = "profession") val profession: String,
-    @Json(name = "nationality") val nationality: String,
-    @Json(name = "income_per_month") val incomePerMonth: Double,
-    @Json(name = "language") val language: String = "fr",
-    @Json(name = "ussd_language") val ussdLanguage: String = "fr",
+    @Json(name = "profession") val profession: String? = null,
+    @Json(name = "nationality") val nationality: String? = null,
+    @Json(name = "income_per_month") val incomePerMonth: Double? = null,
+    @Json(name = "language") val language: String? = "fr",
+    @Json(name = "ussd_language") val ussdLanguage: String? = "fr",
     @Json(name = "company_name") val companyName: String? = null,
     @Json(name = "activity_description") val activityDescription: String? = null,
-    @Json(name = "profile_photo") val profilePhoto: String, // Base64
-    @Json(name = "id_front_image") val idFrontImage: String, // Base64
-    @Json(name = "id_back_image") val idBackImage: String? = null, // Base64
-    @Json(name = "signature_image") val signatureImage: String, // Base64
-    @Json(name = "representative") val representative: AgentCustomerRepresentativeDto
+    @Json(name = "profile_photo") val profilePhoto: String? = null,
+    @Json(name = "id_front_image") val idFrontImage: String? = null,
+    @Json(name = "id_back_image") val idBackImage: String? = null,
+    @Json(name = "signature_image") val signatureImage: String? = null,
+    @Json(name = "representative") val representative: AgentCustomerRepresentativeDto? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -312,13 +345,16 @@ data class AgentCustomerCreatedByDto(
 
 @JsonClass(generateAdapter = true)
 data class AgentRegisterCustomerResponse(
-    @Json(name = "success") val success: Boolean = false,
+    @Json(name = "success") val success: Boolean = true,
     @Json(name = "code") val code: String? = null,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null,
     @Json(name = "customer") val customer: AgentCreatedCustomerDto? = null,
     @Json(name = "referral") val referral: AgentCustomerReferralDto? = null,
-    @Json(name = "created_by") val createdBy: AgentCustomerCreatedByDto? = null
+    @Json(name = "created_by") val createdBy: AgentCustomerCreatedByDto? = null,
+    @Json(name = "temporary_password") val temporaryPassword: String? = null,
+    @Json(name = "temp_password") val tempPassword: String? = null,
+    @Json(name = "pin") val pin: String? = null
 )
 
 @JsonClass(generateAdapter = true)

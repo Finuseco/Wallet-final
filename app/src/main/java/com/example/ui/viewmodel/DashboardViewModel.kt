@@ -1675,12 +1675,23 @@ main = it.main.copy(
     }
 
     fun loadAgentCustomerOptions() {
-        updateAgent { copy(isAgentCustomerOptionsLoading = true) }
+        val agentCountry = userProfile.value?.country
+        updateAgent { copy(isAgentCustomerOptionsLoading = true, agentCustomerRegisterError = null) }
         viewModelScope.launch {
-            val res = repository.getAgentCustomerOptions()
+            val res = repository.getAgentCustomerOptions(agentCountry)
             res.onSuccess { opts ->
+                val effectiveCountry = opts.country ?: if (!agentCountry.isNullOrBlank()) {
+                    com.example.data.model.AgentCountryOptionDto(
+                        code = agentCountry,
+                        name = if (agentCountry.equals("CD", ignoreCase = true)) "RD Congo" else agentCountry,
+                        dialCode = if (agentCountry.equals("CD", ignoreCase = true)) "+243" else null,
+                        currencyCode = "USD"
+                    )
+                } else null
+                val finalOpts = opts.copy(country = effectiveCountry)
                 updateAgent { copy(isAgentCustomerOptionsLoading = false,
-                        agentCustomerOptions = opts) }
+                        agentCustomerOptions = finalOpts,
+                        agentCustomerRegisterError = null) }
             }.onFailure { err ->
                 updateAgent { copy(isAgentCustomerOptionsLoading = false,
                         agentCustomerRegisterError = err.message) }

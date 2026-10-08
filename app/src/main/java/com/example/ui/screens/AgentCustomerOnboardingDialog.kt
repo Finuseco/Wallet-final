@@ -9,74 +9,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Draw
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -88,15 +35,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.data.model.AgentCustomerOptionsResponse
-import com.example.data.model.AgentCustomerRepresentativeDto
-import com.example.data.model.AgentRegisterCustomerRequest
-import com.example.data.model.AgentRegisterCustomerResponse
+import com.example.data.model.*
 import com.example.ui.components.CameraCaptureMode
 import com.example.ui.components.CashPayCameraCaptureDialog
 import com.example.ui.theme.MulishFontFamily
 import java.io.ByteArrayOutputStream
 
+/**
+ * Inscription Client complète en plusieurs étapes (1 à 6) depuis l'interface Agent.
+ *
+ * Utilise les données réelles du serveur :
+ * - GET  /api/v1/agents/customers/options  (Pays officiel de l'Agent, provinces, types de compte)
+ * - POST /api/v1/agents/customers/register (Validation et création finale)
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentCustomerOnboardingDialog(
@@ -116,8 +67,20 @@ fun AgentCustomerOnboardingDialog(
     val clipboardManager = LocalClipboardManager.current
     var currentStep by remember { mutableIntStateOf(1) } // 1..6
 
-    // Form fields
-    var accountType by remember { mutableStateOf("national") }
+    // Options issues de l'API
+    val provinces: List<AgentProvinceItem> = remember(optionsResponse) {
+        optionsResponse?.getNormalizedProvinces() ?: emptyList()
+    }
+    val accountTypes: List<String> = remember(optionsResponse) {
+        optionsResponse?.getAccountTypes() ?: listOf("national", "diaspora", "business")
+    }
+    val agentCountry = optionsResponse?.country
+    val countryDialCode = agentCountry?.dialCode ?: "+243"
+    val countryName = agentCountry?.name ?: "RD Congo"
+    val countryCode = agentCountry?.code ?: "CD"
+
+    // --- Étape 1 : Identité Personnelle ---
+    var selectedAccountType by remember { mutableStateOf("national") }
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var middleName by remember { mutableStateOf("") }
@@ -129,52 +92,48 @@ fun AgentCustomerOnboardingDialog(
     var profession by remember { mutableStateOf("Commerçant") }
     var incomePerMonth by remember { mutableStateOf("300") }
 
-    var phone by remember { mutableStateOf("") }
+    // --- Étape 2 : Contact & Résidence ---
+    var rawPhone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var selectedProvince by remember { mutableStateOf("") }
+    var selectedProvince by remember { mutableStateOf<AgentProvinceItem?>(null) }
     var city by remember { mutableStateOf("Kinshasa") }
     var address by remember { mutableStateOf("") }
-    var language by remember { mutableStateOf("fr") }
-    var ussdLanguage by remember { mutableStateOf("fr") }
+    var provinceMenuExpanded by remember { mutableStateOf(false) }
 
+    // --- Étape 3 : Pièce d'Identité & Entreprise ---
     var idType by remember { mutableStateOf("national_id") }
     var idNumber by remember { mutableStateOf("") }
     var idIssuedDate by remember { mutableStateOf("") }
     var idExpiryDate by remember { mutableStateOf("") }
-    var companyName by remember { mutableStateOf("") }
+    var businessName by remember { mutableStateOf("") }
     var activityDescription by remember { mutableStateOf("") }
 
+    // --- Étape 4 : Personne de Référence ---
     var repName by remember { mutableStateOf("") }
     var repContact by remember { mutableStateOf("") }
     var repRelation by remember { mutableStateOf("parent") }
 
+    // --- Étape 5 : Captures & Signature ---
     var profilePhotoBase64 by remember { mutableStateOf("") }
     var idFrontBase64 by remember { mutableStateOf("") }
     var idBackBase64 by remember { mutableStateOf("") }
     var signatureBase64 by remember { mutableStateOf("") }
-
-    // Camera capture modal state
     var activeCameraMode by remember { mutableStateOf<CameraCaptureMode?>(null) }
     var showSignaturePad by remember { mutableStateOf(false) }
 
-    // Dropdown states
-    var provinceMenuExpanded by remember { mutableStateOf(false) }
-    var genderMenuExpanded by remember { mutableStateOf(false) }
-    var maritalMenuExpanded by remember { mutableStateOf(false) }
-    var idTypeMenuExpanded by remember { mutableStateOf(false) }
-    var relationMenuExpanded by remember { mutableStateOf(false) }
-
-    // Auto-select first province if options change
-    LaunchedEffect(optionsResponse) {
-        if (selectedProvince.isBlank()) {
-            val firstProv = optionsResponse?.provinces?.firstOrNull()?.name
-            if (!firstProv.isNullOrBlank()) {
-                selectedProvince = firstProv
-            }
+    // Auto-sélection par défaut si options chargées
+    LaunchedEffect(accountTypes) {
+        if (!accountTypes.contains(selectedAccountType) && accountTypes.isNotEmpty()) {
+            selectedAccountType = accountTypes.first()
+        }
+    }
+    LaunchedEffect(provinces) {
+        if (selectedProvince == null && provinces.isNotEmpty()) {
+            selectedProvince = provinces.first()
         }
     }
 
-    // Active Camera dialog
+    // Modal Caméra
     activeCameraMode?.let { mode ->
         CashPayCameraCaptureDialog(
             mode = mode,
@@ -190,7 +149,7 @@ fun AgentCustomerOnboardingDialog(
         )
     }
 
-    // Signature Pad Modal
+    // Modal Signature Tactile
     if (showSignaturePad) {
         SignatureCaptureModal(
             onDismiss = { showSignaturePad = false },
@@ -213,54 +172,81 @@ fun AgentCustomerOnboardingDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shadowElevation = 4.dp
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (currentStep > 1 && registerSuccess == null) {
-                                IconButton(
-                                    onClick = { currentStep-- },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Retour",
-                                        tint = Color.White
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (currentStep > 1 && registerSuccess == null) {
+                                    IconButton(
+                                        onClick = { currentStep-- },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Précédent",
+                                            tint = Color.White
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                                Column {
+                                    Text(
+                                        text = "Création Compte Client",
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (registerSuccess != null) "Compte créé avec succès"
+                                        else "Étape $currentStep sur 6 • Espace Agent CashPay",
+                                        fontFamily = MulishFontFamily,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF00E676)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(6.dp))
                             }
-                            Column {
-                                Text(
-                                    text = "Création Compte Client",
-                                    fontFamily = MulishFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = if (registerSuccess != null) "Compte créé avec succès"
-                                    else "Étape $currentStep sur 6 • Espace Agent",
-                                    fontFamily = MulishFontFamily,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF00E676)
+
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Fermer",
+                                    tint = Color(0xFF94A3B8)
                                 )
                             }
                         }
 
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Fermer",
-                                tint = Color(0xFF94A3B8)
-                            )
+                        if (registerSuccess == null && !isLoadingOptions) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            // Barre de progression 6 segments
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                repeat(6) { index ->
+                                    val stepNum = index + 1
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                if (stepNum <= currentStep) Color(0xFF00E676)
+                                                else Color(0xFF334155)
+                                            )
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -272,13 +258,18 @@ fun AgentCustomerOnboardingDialog(
                     .padding(paddingValues)
                     .background(Color(0xFF0F172A))
             ) {
-                if (registerSuccess != null && registerSuccess.success) {
-                    // Success Screen matching specs
-                    AgentCustomerRegisterSuccessView(
+                if (registerSuccess != null) {
+                    // Écran de succès
+                    CustomerRegistrationSuccessView(
                         response = registerSuccess,
-                        onClose = onDismiss
+                        onClose = onDismiss,
+                        onCopy = { text, label ->
+                            clipboardManager.setText(AnnotatedString(text))
+                            Toast.makeText(context, "$label copié !", Toast.LENGTH_SHORT).show()
+                        }
                     )
                 } else if (isLoadingOptions) {
+                    // Chargement des options
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -286,45 +277,88 @@ fun AgentCustomerOnboardingDialog(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator(color = Color(0xFF00E676), strokeWidth = 3.dp)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        CircularProgressIndicator(
+                            color = Color(0xFF00E676),
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
                         Text(
                             text = "Chargement des options de votre pays...",
-                            color = Color(0xFFCBD5E1),
+                            color = Color.White,
                             fontFamily = MulishFontFamily,
-                            fontSize = 14.sp
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Récupération des données depuis le serveur CashPay",
+                            color = Color(0xFF94A3B8),
+                            fontFamily = MulishFontFamily,
+                            fontSize = 12.5.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
+                } else if (optionsResponse == null && !registerError.isNullOrBlank()) {
+                    // Erreur chargement options
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Impossible de charger les options",
+                            color = Color.White,
+                            fontFamily = MulishFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = registerError,
+                            color = Color(0xFFFECACA),
+                            fontFamily = MulishFontFamily,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = onRetryOptions,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Réessayer",
+                                color = Color(0xFF0F172A),
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = MulishFontFamily
+                            )
+                        }
+                    }
                 } else {
+                    // Formulaire 6 étapes
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(20.dp),
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Progress indicator bar
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            repeat(6) { index ->
-                                val stepNum = index + 1
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(5.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(
-                                            if (stepNum <= currentStep) Color(0xFF00E676)
-                                            else Color(0xFF1E293B)
-                                        )
-                                )
-                            }
-                        }
-
-                        // Error Banner if present
-                        registerError?.let { err ->
+                        // Bannière d'erreur si présente
+                        AnimatedVisibility(visible = !registerError.isNullOrBlank()) {
                             Surface(
                                 color = Color(0xFF7F1D1D).copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(12.dp),
@@ -334,14 +368,19 @@ fun AgentCustomerOnboardingDialog(
                                 Row(
                                     modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = Color(0xFFEF4444))
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444)
+                                    )
                                     Text(
-                                        text = err,
+                                        text = registerError ?: "",
                                         color = Color(0xFFFECACA),
                                         fontSize = 12.5.sp,
-                                        fontFamily = MulishFontFamily
+                                        fontFamily = MulishFontFamily,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
@@ -349,83 +388,278 @@ fun AgentCustomerOnboardingDialog(
 
                         when (currentStep) {
                             1 -> {
-                                // Step 1: Identité Personnelle
-                                StepHeader("1. Identité du Client", "Saisissez les informations d'état civil du nouveau client.")
+                                // ----------------------------------------------------
+                                // ÉTAPE 1 : IDENTITÉ PERSONNELLE
+                                // ----------------------------------------------------
+                                StepSectionTitle("1. Identité du Client", "Informations d'état civil du nouveau client.")
 
-                                FormInputField("Prénom *", firstName, { firstName = it }, "Ex: Jean")
-                                FormInputField("Nom de famille *", lastName, { lastName = it }, "Ex: Mukendi")
-                                FormInputField("Post-nom (Optionnel)", middleName, { middleName = it }, "Ex: Ilunga")
-
-                                // Genre Selector
-                                Text("Genre *", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    listOf("male" to "Homme", "female" to "Femme", "other" to "Autre").forEach { (code, label) ->
-                                        val isSel = gender == code
-                                        Surface(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(42.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(1.dp, if (isSel) Color(0xFF00E676) else Color(0xFF334155), RoundedCornerShape(10.dp))
-                                                .clickable { gender = code },
-                                            color = if (isSel) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFF1E293B)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Text(label, color = if (isSel) Color(0xFF00E676) else Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                // Type de compte (options serveur)
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "Type de compte *",
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 12.5.sp,
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        accountTypes.forEach { typeKey ->
+                                            val isSelected = selectedAccountType.equals(typeKey, ignoreCase = true)
+                                            val label = when (typeKey.lowercase()) {
+                                                "national" -> "National"
+                                                "diaspora" -> "Diaspora"
+                                                "business" -> "Business"
+                                                else -> typeKey.replaceFirstChar { it.uppercase() }
+                                            }
+                                            Surface(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(42.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .border(
+                                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                                        color = if (isSelected) Color(0xFF00E676) else Color(0xFF334155),
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    )
+                                                    .clickable { selectedAccountType = typeKey },
+                                                color = if (isSelected) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFF1E293B)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(
+                                                        text = label,
+                                                        color = if (isSelected) Color(0xFF00E676) else Color.White,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.5.sp,
+                                                        fontFamily = MulishFontFamily
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                FormInputField("Date de naissance (AAAA-MM-JJ) *", birthDate, { birthDate = it }, "2000-01-01", KeyboardType.Text)
+                                FormInputField("Prénom *", firstName, { firstName = it }, "Ex: Jean")
+                                FormInputField("Nom de famille *", lastName, { lastName = it }, "Ex: Mukendi")
+                                FormInputField("Post-nom (Optionnel)", middleName, { middleName = it }, "Ex: Ilunga")
+
+                                // Genre
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Genre *", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        listOf("male" to "Homme", "female" to "Femme", "other" to "Autre").forEach { (code, label) ->
+                                            val isSel = gender == code
+                                            Surface(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(40.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .border(1.dp, if (isSel) Color(0xFF00E676) else Color(0xFF334155), RoundedCornerShape(10.dp))
+                                                    .clickable { gender = code },
+                                                color = if (isSel) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFF1E293B)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(label, color = if (isSel) Color(0xFF00E676) else Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // État civil
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("État civil *", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        listOf("single" to "Célib.", "married" to "Marié(e)", "divorced" to "Divorcé(e)", "widowed" to "Veuf(ve)").forEach { (code, label) ->
+                                            val isSel = maritalStatus == code
+                                            Surface(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(40.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .border(1.dp, if (isSel) Color(0xFF00E676) else Color(0xFF334155), RoundedCornerShape(10.dp))
+                                                    .clickable { maritalStatus = code },
+                                                color = if (isSel) Color(0xFF00E676).copy(alpha = 0.15f) else Color(0xFF1E293B)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Text(label, color = if (isSel) Color(0xFF00E676) else Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.Center)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                FormInputField("Date de naissance (AAAA-MM-JJ) *", birthDate, { birthDate = it }, "2000-01-01")
                                 FormInputField("Lieu de naissance *", birthPlace, { birthPlace = it }, "Kinshasa")
                                 FormInputField("Nationalité *", nationality, { nationality = it }, "Congolaise")
                                 FormInputField("Profession *", profession, { profession = it }, "Commerçant")
                                 FormInputField("Revenu mensuel estimé (USD) *", incomePerMonth, { incomePerMonth = it }, "300", KeyboardType.Number)
 
-                                StepNextButton(
-                                    label = "Suivant : Coordonnées",
-                                    enabled = firstName.isNotBlank() && lastName.isNotBlank() && birthDate.isNotBlank() && birthPlace.isNotBlank() && incomePerMonth.isNotBlank(),
-                                    onClick = { currentStep = 2 }
+                                NavigationButtonBar(
+                                    nextLabel = "Suivant : Contact & Résidence",
+                                    nextEnabled = firstName.isNotBlank() && lastName.isNotBlank() && birthDate.isNotBlank() && birthPlace.isNotBlank(),
+                                    onNext = { currentStep = 2 }
                                 )
                             }
 
                             2 -> {
-                                // Step 2: Coordonnées & Province
-                                val countryDial = optionsResponse?.country?.dialCode ?: "+243"
-                                StepHeader("2. Contact & Résidence", "Pays rattaché à l'Agent : ${optionsResponse?.country?.name ?: "RDC"} ($countryDial)")
+                                // ----------------------------------------------------
+                                // ÉTAPE 2 : CONTACT & RÉSIDENCE (Pays de l'Agent & Provinces API)
+                                // ----------------------------------------------------
+                                StepSectionTitle("2. Contact & Résidence", "Coordonnées du client dans le pays de l'Agent.")
 
-                                FormInputField("Numéro de Téléphone *", phone, { phone = it }, "Ex: 833248614 ou 243...", KeyboardType.Phone)
-                                FormInputField("Adresse Email (Optionnel)", email, { email = it }, "client@email.com", KeyboardType.Email)
-
-                                // Province Dropdown from Server Options
-                                Text("Province du Client *", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
-                                val provList = optionsResponse?.provinces ?: emptyList()
-                                ExposedDropdownMenuBox(
-                                    expanded = provinceMenuExpanded,
-                                    onExpandedChange = { provinceMenuExpanded = !provinceMenuExpanded }
+                                // Bannière Pays de l'Agent
+                                Surface(
+                                    color = Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Surface(
+                                            color = Color(0xFF00E676).copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Public,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF00E676),
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Pays : $countryName ($countryCode)",
+                                                color = Color.White,
+                                                fontFamily = MulishFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp
+                                            )
+                                            Text(
+                                                text = "Indicatif officiel : $countryDialCode (Défini par votre compte Agent)",
+                                                color = Color(0xFF94A3B8),
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 11.5.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Téléphone
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Numéro de Téléphone *",
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 12.5.sp,
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                     OutlinedTextField(
-                                        value = if (selectedProvince.isNotBlank()) selectedProvince else "Sélectionner la province",
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = provinceMenuExpanded) },
-                                        modifier = Modifier.fillMaxWidth().menuAnchor(),
-                                        colors = darkTextFieldColors(),
+                                        value = rawPhone,
+                                        onValueChange = { input -> rawPhone = input.filter { it.isDigit() } },
+                                        placeholder = {
+                                            Text(
+                                                text = "Ex: 833248614",
+                                                color = Color(0xFF64748B),
+                                                fontSize = 13.5.sp,
+                                                fontFamily = MulishFontFamily
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Surface(
+                                                color = Color(0xFF334155),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.padding(start = 8.dp, end = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = countryDialCode,
+                                                    color = Color(0xFF00E676),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                    fontFamily = MulishFontFamily,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = clientTextFieldColors(),
                                         shape = RoundedCornerShape(12.dp)
                                     )
-                                    ExposedDropdownMenu(
+                                    Text(
+                                        text = "Le serveur vérifie que le numéro appartient au pays de l'Agent",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.5.sp,
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+
+                                FormInputField("Adresse Email (Optionnel)", email, { email = it }, "client@exemple.com", KeyboardType.Email, Icons.Default.Email)
+
+                                // Province issue de l'API
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Province du Client *",
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 12.5.sp,
+                                        fontFamily = MulishFontFamily,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    ExposedDropdownMenuBox(
                                         expanded = provinceMenuExpanded,
-                                        onDismissRequest = { provinceMenuExpanded = false }
+                                        onExpandedChange = { provinceMenuExpanded = !provinceMenuExpanded }
                                     ) {
-                                        provList.forEach { prov ->
-                                            DropdownMenuItem(
-                                                text = { Text(prov.name ?: "", color = Color(0xFF0F172A)) },
-                                                onClick = {
-                                                    selectedProvince = prov.name ?: ""
-                                                    provinceMenuExpanded = false
+                                        OutlinedTextField(
+                                            value = selectedProvince?.name ?: "Sélectionner la province",
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = provinceMenuExpanded) },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF00E676))
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .menuAnchor(),
+                                            colors = clientTextFieldColors(),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = provinceMenuExpanded,
+                                            onDismissRequest = { provinceMenuExpanded = false },
+                                            modifier = Modifier.background(Color(0xFF1E293B))
+                                        ) {
+                                            if (provinces.isEmpty()) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Aucune province disponible", color = Color(0xFF94A3B8)) },
+                                                    onClick = { provinceMenuExpanded = false }
+                                                )
+                                            } else {
+                                                provinces.forEach { prov ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                text = prov.name,
+                                                                color = Color.White,
+                                                                fontWeight = if (selectedProvince?.code == prov.code) FontWeight.Bold else FontWeight.Normal
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            selectedProvince = prov
+                                                            provinceMenuExpanded = false
+                                                        }
+                                                    )
                                                 }
-                                            )
+                                            }
                                         }
                                     }
                                 }
@@ -433,16 +667,19 @@ fun AgentCustomerOnboardingDialog(
                                 FormInputField("Ville *", city, { city = it }, "Kinshasa")
                                 FormInputField("Adresse physique / Quartier *", address, { address = it }, "Av. Kasa-Vubu N° 12, Gombe")
 
-                                StepNextButton(
-                                    label = "Suivant : Pièce d'Identité",
-                                    enabled = phone.isNotBlank() && selectedProvince.isNotBlank() && city.isNotBlank() && address.isNotBlank(),
-                                    onClick = { currentStep = 3 }
+                                NavigationButtonBar(
+                                    nextLabel = "Suivant : Pièce d'Identité",
+                                    nextEnabled = rawPhone.isNotBlank() && selectedProvince != null && city.isNotBlank(),
+                                    onPrev = { currentStep = 1 },
+                                    onNext = { currentStep = 3 }
                                 )
                             }
 
                             3 -> {
-                                // Step 3: Pièce d'Identité
-                                StepHeader("3. Pièce d'Identité", "Sélectionnez et renseignez le document d'identification du client.")
+                                // ----------------------------------------------------
+                                // ÉTAPE 3 : PIÈCE D'IDENTITÉ & ENTREPRISE
+                                // ----------------------------------------------------
+                                StepSectionTitle("3. Pièce d'Identité & Entreprise", "Document d'identification et activité du client.")
 
                                 Text("Type de Pièce *", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -451,7 +688,7 @@ fun AgentCustomerOnboardingDialog(
                                         Surface(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(42.dp)
+                                                .height(40.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(1.dp, if (isSel) Color(0xFF00E676) else Color(0xFF334155), RoundedCornerShape(10.dp))
                                                 .clickable { idType = code },
@@ -467,19 +704,25 @@ fun AgentCustomerOnboardingDialog(
                                 FormInputField("Numéro de la pièce *", idNumber, { idNumber = it }, "Ex: ID-98472918")
                                 FormInputField("Date d'émission (Optionnel)", idIssuedDate, { idIssuedDate = it }, "2023-01-15")
                                 FormInputField("Date d'expiration (Optionnel)", idExpiryDate, { idExpiryDate = it }, "2028-01-15")
-                                FormInputField("Nom Entreprise (Optionnel)", companyName, { companyName = it }, "Ex: Éts Mukendi & Frères")
-                                FormInputField("Activité Commerciale (Optionnel)", activityDescription, { activityDescription = it }, "Commerce de gros et détail")
 
-                                StepNextButton(
-                                    label = "Suivant : Contact de Référence",
-                                    enabled = idNumber.isNotBlank(),
-                                    onClick = { currentStep = 4 }
+                                if (selectedAccountType.equals("business", ignoreCase = true)) {
+                                    FormInputField("Nom Entreprise / Commercial *", businessName, { businessName = it }, "Ex: Éts Mukendi & Frères", leadingIcon = Icons.Default.Business)
+                                    FormInputField("Activité Commerciale (Optionnel)", activityDescription, { activityDescription = it }, "Commerce général, import-export")
+                                }
+
+                                NavigationButtonBar(
+                                    nextLabel = "Suivant : Personne de Référence",
+                                    nextEnabled = idNumber.isNotBlank(),
+                                    onPrev = { currentStep = 2 },
+                                    onNext = { currentStep = 4 }
                                 )
                             }
 
                             4 -> {
-                                // Step 4: Personne de Référence / Représentant
-                                StepHeader("4. Personne de Référence", "Indiquez un contact de confiance (parent, tuteur ou conjoint).")
+                                // ----------------------------------------------------
+                                // ÉTAPE 4 : PERSONNE DE RÉFÉRENCE / REPRÉSENTANT
+                                // ----------------------------------------------------
+                                StepSectionTitle("4. Personne de Référence", "Contact d'un proche ou représentant de confiance.")
 
                                 FormInputField("Nom complet du contact de référence *", repName, { repName = it }, "Ex: Marie Mukendi")
                                 FormInputField("Téléphone de la référence *", repContact, { repContact = it }, "Ex: 243812345678", KeyboardType.Phone)
@@ -491,7 +734,7 @@ fun AgentCustomerOnboardingDialog(
                                         Surface(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .height(42.dp)
+                                                .height(40.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(1.dp, if (isSel) Color(0xFF00E676) else Color(0xFF334155), RoundedCornerShape(10.dp))
                                                 .clickable { repRelation = code },
@@ -504,59 +747,71 @@ fun AgentCustomerOnboardingDialog(
                                     }
                                 }
 
-                                StepNextButton(
-                                    label = "Suivant : Captures & Signature",
-                                    enabled = repName.isNotBlank() && repContact.isNotBlank(),
-                                    onClick = { currentStep = 5 }
+                                NavigationButtonBar(
+                                    nextLabel = "Suivant : Captures & Signature",
+                                    nextEnabled = repName.isNotBlank() && repContact.isNotBlank(),
+                                    onPrev = { currentStep = 3 },
+                                    onNext = { currentStep = 5 }
                                 )
                             }
 
                             5 -> {
-                                // Step 5: Captures Biométriques & Signature
-                                StepHeader("5. Captures & Signature", "Prenez la photo du client, sa pièce d'identité et faites-lui apposer sa signature.")
+                                // ----------------------------------------------------
+                                // ÉTAPE 5 : CAPTURES & SIGNATURE TACTILE
+                                // ----------------------------------------------------
+                                StepSectionTitle("5. Captures & Signature", "Photos de la pièce, portrait et signature du client.")
 
-                                MediaCaptureCard(
-                                    title = "Photo de profil du Client *",
-                                    description = "Selfie ou portrait net du visage",
-                                    hasCapture = profilePhotoBase64.isNotBlank(),
+                                CaptureItemCard(
+                                    title = "Photo de profil du Client",
+                                    description = "Portrait net du client",
+                                    isCaptured = profilePhotoBase64.isNotBlank(),
                                     icon = Icons.Default.Person,
-                                    onCapture = { activeCameraMode = CameraCaptureMode.SELFIE_PROFILE }
+                                    onAction = { activeCameraMode = CameraCaptureMode.SELFIE_PROFILE }
                                 )
 
-                                MediaCaptureCard(
-                                    title = "Pièce d'Identité (Recto) *",
+                                CaptureItemCard(
+                                    title = "Pièce d'Identité (Recto)",
                                     description = "Face avant claire avec texte lisible",
-                                    hasCapture = idFrontBase64.isNotBlank(),
+                                    isCaptured = idFrontBase64.isNotBlank(),
                                     icon = Icons.Default.CreditCard,
-                                    onCapture = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_FRONT }
+                                    onAction = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_FRONT }
                                 )
 
-                                MediaCaptureCard(
+                                CaptureItemCard(
                                     title = "Pièce d'Identité (Verso - Optionnel)",
                                     description = "Face arrière du document",
-                                    hasCapture = idBackBase64.isNotBlank(),
+                                    isCaptured = idBackBase64.isNotBlank(),
                                     icon = Icons.Default.CreditCard,
-                                    onCapture = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_BACK }
+                                    onAction = { activeCameraMode = CameraCaptureMode.ID_DOCUMENT_BACK }
                                 )
 
-                                MediaCaptureCard(
-                                    title = "Signature tactile du Client *",
-                                    description = "Signature au doigt sur l'écran tactile",
-                                    hasCapture = signatureBase64.isNotBlank(),
+                                CaptureItemCard(
+                                    title = "Signature tactile du Client",
+                                    description = "Signature apposée sur l'écran tactile",
+                                    isCaptured = signatureBase64.isNotBlank(),
                                     icon = Icons.Default.Draw,
-                                    onCapture = { showSignaturePad = true }
+                                    onAction = { showSignaturePad = true }
                                 )
 
-                                StepNextButton(
-                                    label = "Suivant : Vérification & Validation",
-                                    enabled = profilePhotoBase64.isNotBlank() && idFrontBase64.isNotBlank() && signatureBase64.isNotBlank(),
-                                    onClick = { currentStep = 6 }
+                                NavigationButtonBar(
+                                    nextLabel = "Suivant : Récapitulatif & Validation",
+                                    nextEnabled = true, // Permettre d'avancer au récapitulatif
+                                    onPrev = { currentStep = 4 },
+                                    onNext = { currentStep = 6 }
                                 )
                             }
 
                             6 -> {
-                                // Step 6: Récapitulatif Final & Validation
-                                StepHeader("6. Vérification & Validation", "Vérifiez soigneusement les informations avant de valider la création du compte.")
+                                // ----------------------------------------------------
+                                // ÉTAPE 6 : RÉCAPITULATIF FINAL & BOUTON DE CRÉATION
+                                // ----------------------------------------------------
+                                StepSectionTitle("6. Vérification & Validation", "Vérifiez attentivement les données avant de lancer la création.")
+
+                                val computedFullName = if (selectedAccountType.equals("business", ignoreCase = true) && businessName.isNotBlank()) {
+                                    businessName.trim()
+                                } else {
+                                    listOfNotNull(firstName.trim(), middleName.trim().ifBlank { null }, lastName.trim()).joinToString(" ")
+                                }
 
                                 Surface(
                                     color = Color(0xFF1E293B),
@@ -568,89 +823,130 @@ fun AgentCustomerOnboardingDialog(
                                         modifier = Modifier.padding(16.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        SummaryRow("Nom complet", "$firstName $lastName $middleName".trim())
-                                        SummaryRow("Téléphone", phone)
-                                        SummaryRow("Province / Ville", "$selectedProvince, $city")
-                                        SummaryRow("Adresse", address)
-                                        SummaryRow("Pièce d'identité", "$idType : $idNumber")
-                                        SummaryRow("Référence", "$repName ($repRelation)")
-                                        SummaryRow("Photo Client", if (profilePhotoBase64.isNotBlank()) "Capturée ✔" else "Manquante ❌")
-                                        SummaryRow("Recto Pièce", if (idFrontBase64.isNotBlank()) "Capturé ✔" else "Manquant ❌")
-                                        SummaryRow("Signature Client", if (signatureBase64.isNotBlank()) "Signé ✔" else "Manquante ❌")
+                                        SummaryItemRow("Type de compte", selectedAccountType.uppercase())
+                                        SummaryItemRow("Nom complet", computedFullName)
+                                        SummaryItemRow("Téléphone", "$countryDialCode $rawPhone")
+                                        SummaryItemRow("Pays & Province", "$countryName • ${selectedProvince?.name ?: "Non définie"}")
+                                        SummaryItemRow("Ville & Adresse", "$city, $address")
+                                        SummaryItemRow("Pièce d'identité", "$idType : $idNumber")
+                                        SummaryItemRow("Référence", "$repName ($repRelation)")
+                                        SummaryItemRow("Photo profil", if (profilePhotoBase64.isNotBlank()) "Capturée ✔" else "Non fournie")
+                                        SummaryItemRow("Pièce Recto", if (idFrontBase64.isNotBlank()) "Capturée ✔" else "Non fournie")
+                                        SummaryItemRow("Signature", if (signatureBase64.isNotBlank()) "Signée ✔" else "Non fournie")
                                     }
                                 }
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                Button(
-                                    onClick = {
-                                        val req = AgentRegisterCustomerRequest(
-                                            accountType = accountType,
-                                            firstName = firstName.trim(),
-                                            lastName = lastName.trim(),
-                                            middleName = if (middleName.isNotBlank()) middleName.trim() else null,
-                                            gender = gender,
-                                            maritalStatus = maritalStatus,
-                                            birthDate = birthDate.trim(),
-                                            birthPlace = birthPlace.trim(),
-                                            email = if (email.isNotBlank()) email.trim() else null,
-                                            phone = phone.trim(),
-                                            province = selectedProvince.trim(),
-                                            city = city.trim(),
-                                            address = address.trim(),
-                                            idType = idType,
-                                            idNumber = idNumber.trim(),
-                                            idIssuedDate = if (idIssuedDate.isNotBlank()) idIssuedDate.trim() else null,
-                                            idExpiryDate = if (idExpiryDate.isNotBlank()) idExpiryDate.trim() else null,
-                                            profession = profession.trim(),
-                                            nationality = nationality.trim(),
-                                            incomePerMonth = incomePerMonth.toDoubleOrNull() ?: 100.0,
-                                            language = language,
-                                            ussdLanguage = ussdLanguage,
-                                            companyName = if (companyName.isNotBlank()) companyName.trim() else null,
-                                            activityDescription = if (activityDescription.isNotBlank()) activityDescription.trim() else null,
-                                            profilePhoto = profilePhotoBase64,
-                                            idFrontImage = idFrontBase64,
-                                            idBackImage = if (idBackBase64.isNotBlank()) idBackBase64 else null,
-                                            signatureImage = signatureBase64,
-                                            representative = AgentCustomerRepresentativeDto(
-                                                name = repName.trim(),
-                                                contact = repContact.trim(),
-                                                relation = repRelation
-                                            )
-                                        )
-                                        onSubmitRegister(req)
-                                    },
-                                    enabled = !isRegistering,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(52.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
-                                    shape = RoundedCornerShape(12.dp)
+                                // Bouton Précédent & Bouton FINAL DE CRÉATION
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    if (isRegistering) {
-                                        CircularProgressIndicator(color = Color(0xFF0F172A), modifier = Modifier.size(20.dp), strokeWidth = 2.5.dp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text("Enregistrement du client en cours...", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontFamily = MulishFontFamily)
-                                    } else {
-                                        Text(
-                                            text = "Créer le compte Client (Wallet)",
-                                            color = Color(0xFF0F172A),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            fontFamily = MulishFontFamily
-                                        )
+                                    OutlinedButton(
+                                        onClick = { currentStep = 5 },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(52.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Modifier", fontWeight = FontWeight.Bold, fontFamily = MulishFontFamily)
                                     }
-                                }
 
-                                TextButton(
-                                    onClick = { currentStep = 1 },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("Modifier les informations", color = Color(0xFF94A3B8), fontSize = 13.sp, fontFamily = MulishFontFamily)
+                                    Button(
+                                        onClick = {
+                                            val cleanDigits = rawPhone.trim().replace("+", "")
+                                            val dialDigits = countryDialCode.replace("+", "")
+                                            val normalizedPhone = if (cleanDigits.startsWith(dialDigits)) {
+                                                cleanDigits
+                                            } else if (cleanDigits.startsWith("0")) {
+                                                dialDigits + cleanDigits.drop(1)
+                                            } else {
+                                                dialDigits + cleanDigits
+                                            }
+
+                                            val req = AgentRegisterCustomerRequest(
+                                                accountType = selectedAccountType,
+                                                firstName = firstName.trim(),
+                                                lastName = lastName.trim(),
+                                                middleName = middleName.trim().ifBlank { null },
+                                                fullName = computedFullName,
+                                                phone = normalizedPhone,
+                                                province = selectedProvince?.code ?: selectedProvince?.name ?: "",
+                                                country = countryCode,
+                                                countryCode = countryCode,
+                                                email = email.trim().ifBlank { null },
+                                                gender = gender,
+                                                maritalStatus = maritalStatus,
+                                                birthDate = birthDate.trim().ifBlank { null },
+                                                birthPlace = birthPlace.trim().ifBlank { null },
+                                                city = city.trim().ifBlank { null },
+                                                address = address.trim().ifBlank { null },
+                                                idType = idType,
+                                                idNumber = idNumber.trim().ifBlank { null },
+                                                idIssuedDate = idIssuedDate.trim().ifBlank { null },
+                                                idExpiryDate = idExpiryDate.trim().ifBlank { null },
+                                                profession = profession.trim().ifBlank { null },
+                                                nationality = nationality.trim().ifBlank { null },
+                                                incomePerMonth = incomePerMonth.toDoubleOrNull(),
+                                                companyName = if (businessName.isNotBlank()) businessName.trim() else null,
+                                                activityDescription = activityDescription.trim().ifBlank { null },
+                                                profilePhoto = profilePhotoBase64.ifBlank { null },
+                                                idFrontImage = idFrontBase64.ifBlank { null },
+                                                idBackImage = idBackBase64.ifBlank { null },
+                                                signatureImage = signatureBase64.ifBlank { null },
+                                                representative = if (repName.isNotBlank() && repContact.isNotBlank()) {
+                                                    AgentCustomerRepresentativeDto(
+                                                        name = repName.trim(),
+                                                        contact = repContact.trim(),
+                                                        relation = repRelation
+                                                    )
+                                                } else null
+                                            )
+
+                                            onSubmitRegister(req)
+                                        },
+                                        enabled = !isRegistering,
+                                        modifier = Modifier
+                                            .weight(2f)
+                                            .height(52.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        if (isRegistering) {
+                                            CircularProgressIndicator(
+                                                color = Color(0xFF0F172A),
+                                                strokeWidth = 2.5.dp,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(
+                                                text = "Création...",
+                                                color = Color(0xFF0F172A),
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 15.sp
+                                            )
+                                        } else {
+                                            Icon(Icons.Default.PersonAdd, contentDescription = null, tint = Color(0xFF0F172A))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Créer le Compte Client",
+                                                color = Color(0xFF0F172A),
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = MulishFontFamily,
+                                                fontSize = 14.5.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -659,21 +955,167 @@ fun AgentCustomerOnboardingDialog(
 }
 
 @Composable
-private fun StepHeader(title: String, description: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun NavigationButtonBar(
+    nextLabel: String,
+    nextEnabled: Boolean,
+    onPrev: (() -> Unit)? = null,
+    onNext: () -> Unit
+) {
+    Spacer(modifier = Modifier.height(10.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (onPrev != null) {
+            OutlinedButton(
+                onClick = onPrev,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Précédent", fontWeight = FontWeight.Bold, fontFamily = MulishFontFamily)
+            }
+        }
+
+        Button(
+            onClick = onNext,
+            enabled = nextEnabled,
+            modifier = Modifier
+                .weight(if (onPrev != null) 2f else 1f)
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF00E676),
+                disabledContainerColor = Color(0xFF1E293B)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = nextLabel,
+                color = if (nextEnabled) Color(0xFF0F172A) else Color(0xFF64748B),
+                fontWeight = FontWeight.Bold,
+                fontFamily = MulishFontFamily,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = if (nextEnabled) Color(0xFF0F172A) else Color(0xFF64748B),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CaptureItemCard(
+    title: String,
+    description: String,
+    isCaptured: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onAction: () -> Unit
+) {
+    Surface(
+        color = Color(0xFF1E293B),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isCaptured) Color(0xFF00E676) else Color(0xFF334155)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onAction() }
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Surface(
+                    color = if (isCaptured) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFF334155),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isCaptured) Color(0xFF00E676) else Color(0xFF94A3B8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = MulishFontFamily,
+                        fontSize = 13.5.sp
+                    )
+                    Text(
+                        text = if (isCaptured) "Document enregistré ✔" else description,
+                        color = if (isCaptured) Color(0xFF00E676) else Color(0xFF94A3B8),
+                        fontFamily = MulishFontFamily,
+                        fontSize = 11.5.sp
+                    )
+                }
+            }
+
+            Surface(
+                color = if (isCaptured) Color(0xFF00E676) else Color(0xFF334155),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Text(
+                    text = if (isCaptured) "Modifier" else "Capturer",
+                    color = if (isCaptured) Color(0xFF0F172A) else Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    fontFamily = MulishFontFamily,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryItemRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color(0xFF94A3B8), fontSize = 12.5.sp, fontFamily = MulishFontFamily)
+        Text(text = value, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, fontFamily = MulishFontFamily)
+    }
+}
+
+@Composable
+private fun StepSectionTitle(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             text = title,
-            fontFamily = MulishFontFamily,
+            color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 18.sp,
-            color = Color.White
+            fontFamily = MulishFontFamily,
+            fontSize = 16.sp
         )
         Text(
-            text = description,
-            fontFamily = MulishFontFamily,
-            fontSize = 13.sp,
+            text = subtitle,
             color = Color(0xFF94A3B8),
-            lineHeight = 18.sp
+            fontFamily = MulishFontFamily,
+            fontSize = 12.sp
         )
     }
 }
@@ -684,261 +1126,60 @@ private fun FormInputField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = label,
-            fontFamily = MulishFontFamily,
-            fontWeight = FontWeight.Bold,
+            color = Color(0xFFCBD5E1),
             fontSize = 12.5.sp,
-            color = Color(0xFFCBD5E1)
+            fontFamily = MulishFontFamily,
+            fontWeight = FontWeight.Bold
         )
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            placeholder = { Text(placeholder, color = Color(0xFF64748B), fontFamily = MulishFontFamily) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = {
+                Text(
+                    text = placeholder,
+                    color = Color(0xFF64748B),
+                    fontSize = 13.5.sp,
+                    fontFamily = MulishFontFamily
+                )
+            },
+            leadingIcon = if (leadingIcon != null) {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = Color(0xFF00E676)
+                    )
+                }
+            } else null,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            colors = darkTextFieldColors(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = clientTextFieldColors(),
             shape = RoundedCornerShape(12.dp)
         )
     }
 }
 
 @Composable
-private fun darkTextFieldColors() = OutlinedTextFieldDefaults.colors(
+private fun clientTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = Color(0xFF00E676),
     unfocusedBorderColor = Color(0xFF334155),
     focusedTextColor = Color.White,
     unfocusedTextColor = Color.White,
     focusedContainerColor = Color(0xFF1E293B),
-    unfocusedContainerColor = Color(0xFF1E293B)
+    unfocusedContainerColor = Color(0xFF1E293B),
+    cursorColor = Color(0xFF00E676)
 )
 
-@Composable
-private fun StepNextButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    Spacer(modifier = Modifier.height(10.dp))
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF00E676),
-            disabledContainerColor = Color(0xFF00E676).copy(alpha = 0.3f)
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(label, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 15.sp, fontFamily = MulishFontFamily)
-            Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color(0xFF0F172A))
-        }
-    }
-}
-
-@Composable
-private fun MediaCaptureCard(
-    title: String,
-    description: String,
-    hasCapture: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onCapture: () -> Unit
-) {
-    Surface(
-        color = Color(0xFF1E293B),
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (hasCapture) Color(0xFF00E676) else Color(0xFF334155)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCapture() }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (hasCapture) Color(0xFF00E676).copy(alpha = 0.2f)
-                            else Color(0xFF334155)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (hasCapture) Icons.Default.Check else icon,
-                        contentDescription = null,
-                        tint = if (hasCapture) Color(0xFF00E676) else Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Column {
-                    Text(
-                        text = title,
-                        fontFamily = MulishFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = Color.White
-                    )
-                    Text(
-                        text = description,
-                        fontFamily = MulishFontFamily,
-                        fontSize = 12.sp,
-                        color = Color(0xFF94A3B8)
-                    )
-                }
-            }
-
-            Surface(
-                color = if (hasCapture) Color(0xFF00E676) else Color(0xFF38BDF8).copy(alpha = 0.15f),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(
-                    text = if (hasCapture) "Modifié" else "Capturer",
-                    color = if (hasCapture) Color(0xFF0F172A) else Color(0xFF38BDF8),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = MulishFontFamily,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = MulishFontFamily)
-    }
-}
-
-@Composable
-private fun AgentCustomerRegisterSuccessView(
-    response: AgentRegisterCustomerResponse,
-    onClose: () -> Unit
-) {
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
-    val customer = response.customer
-    val walletId = customer?.idWallet ?: ""
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Spacer(modifier = Modifier.height(10.dp))
-        Box(
-            modifier = Modifier
-                .size(70.dp)
-                .background(Color(0xFF00E676).copy(alpha = 0.2f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF00E676), modifier = Modifier.size(46.dp))
-        }
-
-        Text(
-            text = "Client Enregistré !",
-            fontFamily = MulishFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            color = Color.White
-        )
-        Text(
-            text = response.message ?: "Le compte a été créé avec succès par l'Agent. Le portefeuille CashPay est actif.",
-            fontFamily = MulishFontFamily,
-            fontSize = 13.5.sp,
-            color = Color(0xFFCBD5E1),
-            textAlign = TextAlign.Center
-        )
-
-        Surface(
-            color = Color(0xFF1E293B),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Wallet ID Highlight
-                Surface(
-                    color = Color(0xFF0F172A),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E676)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("ID Wallet Client généré", fontSize = 11.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
-                            Text(walletId, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF00E676), fontFamily = MulishFontFamily)
-                        }
-                        IconButton(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(walletId))
-                                Toast.makeText(context, "Wallet ID copié !", Toast.LENGTH_SHORT).show()
-                            }
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copier", tint = Color(0xFF00E676))
-                        }
-                    }
-                }
-
-                SummaryRow("Nom complet", customer?.fullName ?: "")
-                SummaryRow("Téléphone", customer?.phone ?: "")
-                SummaryRow("Province", customer?.province ?: "")
-                SummaryRow("Statut Parrainage Agent", response.referral?.status ?: "Pending Deposit")
-                SummaryRow("Agent Référent", response.createdBy?.fullName ?: "Vous")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Button(
-            onClick = onClose,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Terminer & Revenir à l'Espace Agent", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontFamily = MulishFontFamily, fontSize = 14.5.sp)
-        }
-    }
-}
-
+/**
+ * Modal de capture de signature tactile sur Canvas.
+ */
 @Composable
 fun SignatureCaptureModal(
     onDismiss: () -> Unit,
@@ -952,8 +1193,9 @@ fun SignatureCaptureModal(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(20.dp)),
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
             color = Color(0xFF0F172A),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155))
         ) {
@@ -967,43 +1209,44 @@ fun SignatureCaptureModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Signature manuscrite du Client",
-                        fontFamily = MulishFontFamily,
+                        text = "Signature Tactile du Client",
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.White
+                        fontFamily = MulishFontFamily,
+                        fontSize = 16.sp
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Fermer", tint = Color(0xFF94A3B8))
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.LightGray)
                     }
                 }
 
                 Text(
-                    text = "Signez avec votre doigt dans le cadre blanc ci-dessous.",
-                    fontSize = 12.sp,
+                    text = "Faites signer le client au doigt directement sur la zone blanche ci-dessous.",
                     color = Color(0xFF94A3B8),
-                    fontFamily = MulishFontFamily
+                    fontFamily = MulishFontFamily,
+                    fontSize = 12.sp
                 )
 
-                // White canvas drawing zone
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(180.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.White)
-                        .border(1.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(12.dp))
                         .pointerInput(Unit) {
-                            detectDragGestures { change, _ ->
-                                points.add(change.position)
-                            }
+                            detectDragGestures(
+                                onDragStart = { offset -> points.add(offset) },
+                                onDrag = { change, _ ->
+                                    points.add(change.position)
+                                    change.consume()
+                                }
+                            )
                         }
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         for (i in 0 until points.size - 1) {
                             val p1 = points[i]
                             val p2 = points[i + 1]
-                            // Don't connect discontinuous lines if distance too big
                             if ((p1 - p2).getDistance() < 60f) {
                                 drawLine(
                                     color = Color.Black,
@@ -1017,9 +1260,9 @@ fun SignatureCaptureModal(
 
                     if (points.isEmpty()) {
                         Text(
-                            text = "✍️ Signez ici",
+                            text = "✍️ Signez ici au doigt",
                             color = Color.LightGray,
-                            fontSize = 18.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.align(Alignment.Center)
                         )
@@ -1035,14 +1278,11 @@ fun SignatureCaptureModal(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.Clear, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Effacer", color = Color(0xFFEF4444), fontSize = 13.sp, fontFamily = MulishFontFamily)
                     }
 
                     Button(
                         onClick = {
-                            // Generate a simple valid base64 signature representation
                             val bmp = Bitmap.createBitmap(400, 200, Bitmap.Config.ARGB_8888)
                             val canvas = android.graphics.Canvas(bmp)
                             canvas.drawColor(android.graphics.Color.WHITE)
@@ -1069,10 +1309,205 @@ fun SignatureCaptureModal(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Confirmer", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 13.sp, fontFamily = MulishFontFamily)
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Vue de succès après création du compte client.
+ */
+@Composable
+private fun CustomerRegistrationSuccessView(
+    response: AgentRegisterCustomerResponse,
+    onClose: () -> Unit,
+    onCopy: (String, String) -> Unit
+) {
+    val cust = response.customer
+    val tempPass = response.temporaryPassword ?: response.tempPassword
+    val pin = response.pin
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Surface(
+            color = Color(0xFF00E676).copy(alpha = 0.15f),
+            shape = RoundedCornerShape(50.dp),
+            modifier = Modifier.size(76.dp),
+            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF00E676))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF00E676),
+                    modifier = Modifier.size(44.dp)
+                )
+            }
+        }
+
+        Text(
+            text = "Compte Client Créé !",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontFamily = MulishFontFamily,
+            fontSize = 20.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Text(
+            text = response.message ?: "Le client a été inscrit avec succès dans votre pays d'Agent.",
+            color = Color(0xFF94A3B8),
+            fontFamily = MulishFontFamily,
+            fontSize = 13.5.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Surface(
+            color = Color(0xFF1E293B),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                cust?.fullName?.let { SuccessDetailRow("Nom complet", it) }
+                    ?: SuccessDetailRow("Client", "${cust?.firstName ?: ""} ${cust?.lastName ?: ""}".trim())
+
+                cust?.phone?.let { SuccessDetailRow("Téléphone", it) }
+
+                cust?.idWallet?.let {
+                    SuccessDetailRow("ID Compte / Wallet", it, onCopy = { onCopy(it, "ID Wallet") })
+                }
+
+                cust?.province?.let { SuccessDetailRow("Province", it) }
+                cust?.country?.let { SuccessDetailRow("Pays", it) }
+                cust?.createdAt?.let { SuccessDetailRow("Date", it) }
+            }
+        }
+
+        if (!tempPass.isNullOrBlank() || !pin.isNullOrBlank()) {
+            Surface(
+                color = Color(0xFF064E3B).copy(alpha = 0.5f),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Identifiants temporaires générés",
+                        color = Color(0xFF34D399),
+                        fontFamily = MulishFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+
+                    if (!tempPass.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Mot de passe : $tempPass",
+                                color = Color.White,
+                                fontFamily = MulishFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            IconButton(onClick = { onCopy(tempPass, "Mot de passe") }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copier", tint = Color(0xFF34D399), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    if (!pin.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Code PIN : $pin",
+                                color = Color.White,
+                                fontFamily = MulishFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            IconButton(onClick = { onCopy(pin, "Code PIN") }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copier", tint = Color(0xFF34D399), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = onClose,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text(
+                text = "Terminer",
+                color = Color(0xFF0F172A),
+                fontWeight = FontWeight.Bold,
+                fontFamily = MulishFontFamily,
+                fontSize = 15.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun SuccessDetailRow(
+    label: String,
+    value: String,
+    onCopy: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily, fontSize = 13.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = value,
+                color = Color.White,
+                fontFamily = MulishFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.5.sp
+            )
+            if (onCopy != null) {
+                Spacer(modifier = Modifier.width(6.dp))
+                IconButton(onClick = onCopy, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copier",
+                        tint = Color(0xFF00E676),
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }
