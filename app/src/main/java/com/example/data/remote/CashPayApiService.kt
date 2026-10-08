@@ -300,6 +300,13 @@ interface CashPayApiService {
         @Path("id") boutiqueId: String
     ): Response<com.example.data.model.GenericShoppingResponse>
 
+    // --- PUBLIC SHOPPING CATALOG API ---
+    @GET("api/public/shopping/user/{userId}/products")
+    suspend fun getPublicUserProducts(
+        @Path("userId") userId: String,
+        @Query("storeId") storeId: String? = null
+    ): Response<com.example.data.model.PublicCatalogResponse>
+
     // --- DEPOSIT API (MaxiCash Gateway) ---
     @POST("api/v1/deposit")
     suspend fun depositMobileMoney(
@@ -333,4 +340,18 @@ interface CashPayApiService {
 
     @GET("api/v1/agents/customers")
     suspend fun getAgentCustomers(): Response<com.example.data.model.AgentCustomerListResponse>
+
+    // --- INTERNATIONAL TRANSFER CLAIMS (Section Client) ---
+    @POST("api/v1/international-transfer/claims")
+    suspend fun createInternationalClaim(
+        @Body request: com.example.data.model.CreateClaimRequest
+    ): Response<com.example.data.model.CreateClaimResponse>
+
+    @GET("api/v1/international-transfer/claims")
+    suspend fun getInternationalClaims(): Response<com.example.data.model.ClaimsListResponse>
+
+    @GET("api/v1/international-transfer/claims/{id}")
+    suspend fun getInternationalClaimDetail(
+        @Path("id") id: Long
+    ): Response<com.example.data.model.ClaimDetailResponse>
 }

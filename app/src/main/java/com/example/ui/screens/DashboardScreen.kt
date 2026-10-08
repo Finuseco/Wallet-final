@@ -53,11 +53,13 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.MonetizationOn
@@ -270,6 +272,10 @@ fun DashboardScreen(
                 showActionPlusDialog = false
                 dashboardViewModel.openExchangeDialog()
             },
+            onInternationalClaims = {
+                showActionPlusDialog = false
+                dashboardViewModel.openClaimsScreen()
+            },
             onAgentDeposit = {
                 showActionPlusDialog = false
                 dashboardViewModel.openAgentServicesScreen(tab = 0)
@@ -289,6 +295,10 @@ fun DashboardScreen(
             onAgentHistory = {
                 showActionPlusDialog = false
                 dashboardViewModel.openAgentServicesScreen(tab = 1)
+            },
+            onAgentShopping = {
+                showActionPlusDialog = false
+                dashboardViewModel.openAgentShoppingDialog(0)
             }
         )
     }
@@ -402,7 +412,28 @@ fun DashboardScreen(
         onOpenCustomerList = {
             dashboardViewModel.loadAgentCustomersList()
             isAgentCustomerListOpen = true
+        },
+        onOpenShopping = { tab ->
+            dashboardViewModel.openAgentShoppingDialog(tab)
         }
+    )
+
+    // Agent Shopping Suite (Boutiques, Publication, Catalogue Public)
+    AgentShoppingDialog(
+        isOpen = uiState.isAgentShoppingDialogOpen,
+        uiState = uiState,
+        onDismiss = { dashboardViewModel.closeAgentShoppingDialog() },
+        onTabSelected = { dashboardViewModel.setShoppingActiveTab(it) },
+        onRefresh = { dashboardViewModel.loadShoppingData() },
+        onCreateBoutique = { name, addr, wa -> dashboardViewModel.createShoppingBoutique(name, addr, wa) },
+        onUpdateBoutique = { bId, name, addr, wa -> dashboardViewModel.updateShoppingBoutique(bId, name, addr, wa) },
+        onDeleteBoutique = { bId -> dashboardViewModel.deleteShoppingBoutique(bId) },
+        onPublishProduct = { req -> dashboardViewModel.publishProduct(req) },
+        onUpdateProduct = { pId, req -> dashboardViewModel.updateProduct(pId, req) },
+        onDeleteProduct = { pId -> dashboardViewModel.deleteProduct(pId) },
+        onEditProduct = { p -> dashboardViewModel.setEditingProduct(p) },
+        onFetchProductReference = { pId -> dashboardViewModel.fetchProductReference(pId) },
+        onFetchPublicCatalog = { uId, sId -> dashboardViewModel.fetchPublicCatalog(uId, sId) }
     )
 
     // Agent Customer Onboarding Dialog (KYC Registration Module)
@@ -454,8 +485,12 @@ fun DashboardScreen(
             onDismiss = { showServicesDialog = false },
             onServiceSelected = { service ->
                 showServicesDialog = false
-                dashboardViewModel.onRecipientChanged(service)
-                dashboardViewModel.openTransferDialog()
+                if (service == "Réclamations internationales") {
+                    dashboardViewModel.openClaimsScreen()
+                } else {
+                    dashboardViewModel.onRecipientChanged(service)
+                    dashboardViewModel.openTransferDialog()
+                }
             }
         )
     }
@@ -506,11 +541,14 @@ fun DashboardScreen(
         )
     }
 
-    // Exchange Dialog (Currency Conversion)
+    // Exchange Dialog (Currency Conversion - Taux Temps Réel Base de Données)
     ExchangeDialog(
         isOpen = uiState.isExchangeDialogOpen,
         walletResponse = uiState.walletResponse,
         exchangeRatesMap = uiState.exchangeRatesMap,
+        realtimeQuoteRate = uiState.realtimeQuoteRate,
+        realtimeQuoteAmount = uiState.realtimeQuoteAmount,
+        isQuoteLoading = uiState.isQuoteLoading,
         fromCurrency = uiState.exchangeFromCurrency,
         toCurrency = uiState.exchangeToCurrency,
         amount = uiState.exchangeAmount,
@@ -523,10 +561,62 @@ fun DashboardScreen(
         onSwapCurrencies = { dashboardViewModel.swapExchangeCurrencies() },
         onAmountChange = { dashboardViewModel.setExchangeAmount(it) },
         onPinChange = { dashboardViewModel.setExchangePin(it) },
+        onRefreshRates = { dashboardViewModel.fetchExchangeRates() },
         onSubmit = { dashboardViewModel.submitExchange() },
         onDismiss = { dashboardViewModel.closeExchangeDialog() },
         onResetSuccess = { dashboardViewModel.resetExchangeSuccess() }
     )
+
+    // International Transfer Claims Screen & Dialogs (Section Client)
+    androidx.activity.compose.BackHandler(enabled = uiState.isClaimsScreenOpen) {
+        dashboardViewModel.closeClaimsScreen()
+    }
+    if (uiState.isClaimsScreenOpen) {
+        InternationalClaimsScreen(
+            isOpen = true,
+            claims = uiState.claimsList,
+            isLoading = uiState.isClaimsLoading,
+            errorMessage = uiState.claimsError,
+            onBack = { dashboardViewModel.closeClaimsScreen() },
+            onRefresh = { dashboardViewModel.loadInternationalClaims() },
+            onOpenNewClaim = { dashboardViewModel.openNewClaimDialog() },
+            onSelectClaim = { dashboardViewModel.openClaimDetail(it) }
+        )
+    }
+
+    if (uiState.isNewClaimDialogOpen) {
+        NewClaimDialog(
+            isOpen = true,
+            isSubmitting = uiState.isSubmittingClaim,
+            errorMessage = uiState.newClaimError,
+            successMessage = uiState.newClaimSuccessMessage,
+            duplicateClaim = uiState.newClaimDuplicateClaim,
+            onDismiss = { dashboardViewModel.closeNewClaimDialog() },
+            onSubmit = { provider, trackingNumber, amount, expectedCurrency, senderCountry, receiveCurrency ->
+                dashboardViewModel.submitInternationalClaim(
+                    provider = provider,
+                    trackingNumber = trackingNumber,
+                    expectedAmount = amount,
+                    expectedCurrency = expectedCurrency,
+                    senderCountry = senderCountry,
+                    receiveInCurrency = receiveCurrency
+                )
+            },
+            onViewExistingClaim = { claim ->
+                dashboardViewModel.closeNewClaimDialog()
+                dashboardViewModel.openClaimDetail(claim)
+            }
+        )
+    }
+
+    if (uiState.isClaimDetailDialogOpen) {
+        ClaimDetailDialog(
+            isOpen = true,
+            claim = uiState.selectedClaimDetail,
+            isLoading = uiState.isClaimDetailLoading,
+            onDismiss = { dashboardViewModel.closeClaimDetail() }
+        )
+    }
 
     // Agent External Mobile Money Pull Dialog
     AgentExternalMoMoDialog(
@@ -5854,6 +5944,7 @@ fun ServicesDialog(
                 )
 
                 val services = listOf(
+                    Triple("Réclamations internationales", "Western Union, MoneyGram, Ria", Color(0xFF00E676)),
                     Triple("Mobile Money", "M-Pesa, Orange Money, Airtel, MTN", Color(0xFFF59E0B)),
                     Triple("Abonnements TV", "Canal+, Startimes, EasyTV", Color(0xFF2563EB)),
                     Triple("Factures Publiques", "SNEL (Électricité), REGIDESO (Eau)", Color(0xFF00C48C)),
@@ -5917,12 +6008,14 @@ fun ActionPlusModalDialog(
     onWithdrawExpress: () -> Unit = {},
     onDeposit: () -> Unit = {},
     onExchange: () -> Unit = {},
+    onInternationalClaims: () -> Unit = {},
     // Agent actions
     onAgentDeposit: () -> Unit = {},
     onAgentWithdraw: () -> Unit = {},
     onAgentExternalMoMo: () -> Unit = {},
     onAgentLoan: () -> Unit = {},
-    onAgentHistory: () -> Unit = {}
+    onAgentHistory: () -> Unit = {},
+    onAgentShopping: () -> Unit = {}
 ) {
     val isAgent = userProfile?.role?.lowercase()?.trim() == "agent"
 
@@ -6049,6 +6142,13 @@ fun ActionPlusModalDialog(
                         iconBg = Color(0xFF0066FF),
                         onClick = onAgentHistory
                     )
+                    ActionPlusTile(
+                        title = "Boutiques & Shopping Agent",
+                        subtitle = "Gérer mes boutiques et publier des produits",
+                        icon = Icons.Default.Store,
+                        iconBg = Color(0xFFFF6600),
+                        onClick = onAgentShopping
+                    )
                 } else {
                     // Standard Client Actions
                     ActionPlusTile(
@@ -6092,6 +6192,13 @@ fun ActionPlusModalDialog(
                         icon = Icons.Default.ShoppingCart,
                         iconBg = Color(0xFFFF8A71),
                         onClick = onPayPos
+                    )
+                    ActionPlusTile(
+                        title = "Réclamations internationales",
+                        subtitle = "Western Union, MoneyGram, Ria",
+                        icon = Icons.Default.Public,
+                        iconBg = Color(0xFF00E676),
+                        onClick = onInternationalClaims
                     )
                 }
                 Spacer(modifier = Modifier.height(10.dp))

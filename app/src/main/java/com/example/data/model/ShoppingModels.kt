@@ -32,8 +32,8 @@ data class BoutiqueResponse(
 @JsonClass(generateAdapter = true)
 data class CreateBoutiqueRequest(
     @Json(name = "name") val name: String,
-    @Json(name = "address") val address: String,
-    @Json(name = "whatsapp_public_number") val whatsappPublicNumber: String
+    @Json(name = "address") val address: String? = null,
+    @Json(name = "whatsapp_public_number") val whatsappPublicNumber: String? = null
 )
 
 // --- PRODUCT MODELS ---
@@ -59,6 +59,9 @@ data class PromotionalPackageDto(
 
 @JsonClass(generateAdapter = true)
 data class ProductDetailsDto(
+    @Json(name = "brand") val brand: String? = null,
+    @Json(name = "model") val model: String? = null,
+    @Json(name = "memory") val memory: String? = null,
     @Json(name = "isbn10") val isbn10: String? = null,
     @Json(name = "isbn13") val isbn13: String? = null,
     @Json(name = "pdfUrl") val pdfUrl: String? = null,
@@ -69,7 +72,17 @@ data class ProductDetailsDto(
 @JsonClass(generateAdapter = true)
 data class ProductSellerDto(
     @Json(name = "id") val id: String? = null,
-    @Json(name = "name") val name: String? = null
+    @Json(name = "walletId") val walletId: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "countryCode") val countryCode: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ProductBoutiqueRefDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "address") val address: String? = null,
+    @Json(name = "whatsappPublicNumber") val whatsappPublicNumber: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -91,9 +104,16 @@ data class ProductDto(
     @Json(name = "categoryId") val categoryId: String = "cat-vetements",
     @Json(name = "boutiqueId") val boutiqueId: String? = null,
     @Json(name = "boutiqueName") val boutiqueName: String? = null,
+    @Json(name = "boutique") val boutique: ProductBoutiqueRefDto? = null,
     @Json(name = "isPublic") val isPublic: Boolean = true,
     @Json(name = "details") val details: ProductDetailsDto? = null,
-    @Json(name = "seller") val seller: ProductSellerDto? = null
+    @Json(name = "seller") val seller: ProductSellerDto? = null,
+    @Json(name = "viewCount") val viewCount: Int = 0,
+    @Json(name = "orderCount") val orderCount: Int = 0,
+    @Json(name = "commentCount") val commentCount: Int = 0,
+    @Json(name = "reviewCount") val reviewCount: Int = 0,
+    @Json(name = "ratingAverage") val ratingAverage: Double = 0.0,
+    @Json(name = "createdAt") val createdAt: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -112,6 +132,8 @@ data class ProductResponse(
     @Json(name = "success") val success: Boolean = false,
     @Json(name = "product") val product: ProductDto? = null,
     @Json(name = "reference") val reference: String? = null,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "countryCode") val countryCode: String? = null,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
 )
@@ -147,8 +169,20 @@ data class PublishProductRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class PublicCatalogResponse(
+    @Json(name = "success") val success: Boolean = false,
+    @Json(name = "userId") val userId: String? = null,
+    @Json(name = "storeId") val storeId: String? = null,
+    @Json(name = "count") val count: Int = 0,
+    @Json(name = "products") val products: List<ProductDto> = emptyList(),
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "error") val error: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class GenericShoppingResponse(
     @Json(name = "success") val success: Boolean = false,
+    @Json(name = "reference") val reference: String? = null,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
 )

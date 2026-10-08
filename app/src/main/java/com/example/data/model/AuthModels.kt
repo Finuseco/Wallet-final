@@ -289,8 +289,15 @@ data class NationalCurrencyDto(
     @Json(name = "countryCode") val countryCode: String? = null,
     @Json(name = "code") val code: String? = null,
     @Json(name = "name") val name: String? = null,
-    @Json(name = "symbol") val symbol: String? = null
-)
+    @Json(name = "symbol") val symbol: String? = null,
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "exchangeRate") val exchangeRate: Double? = null,
+    @Json(name = "rateToUsd") val rateToUsd: Double? = null,
+    @Json(name = "usdRate") val usdRate: Double? = null
+) {
+    val effectiveRate: Double?
+        get() = rate ?: exchangeRate ?: rateToUsd ?: usdRate
+}
 
 @JsonClass(generateAdapter = true)
 data class CryptoBalanceDto(
@@ -331,6 +338,9 @@ data class WalletResponse(
     @Json(name = "balances") val balances: BalancesDto? = null,
     @Json(name = "bitcoin") val bitcoin: BitcoinInfoDto? = null,
     @Json(name = "cards") val cards: List<CardInfoDto> = emptyList(),
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "exchangeRate") val exchangeRate: Double? = null,
+    @Json(name = "rates") val rates: Map<String, Double>? = null,
     @Json(name = "error") val error: String? = null
 )
 
@@ -340,7 +350,9 @@ data class TransferCurrencyDto(
     @Json(name = "name") val name: String,
     @Json(name = "symbol") val symbol: String,
     @Json(name = "type") val type: String,
-    @Json(name = "balance") val balance: Double
+    @Json(name = "balance") val balance: Double,
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "exchangeRate") val exchangeRate: Double? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -349,6 +361,9 @@ data class TransfersMetaResponse(
     @Json(name = "country") val country: Map<String, String>? = null,
     @Json(name = "localCurrency") val localCurrency: NationalCurrencyDto? = null,
     @Json(name = "currencies") val currencies: List<TransferCurrencyDto> = emptyList(),
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "exchangeRate") val exchangeRate: Double? = null,
+    @Json(name = "rates") val rates: Map<String, Double>? = null,
     @Json(name = "error") val error: String? = null
 )
 

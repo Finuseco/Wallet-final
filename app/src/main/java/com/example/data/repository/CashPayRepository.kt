@@ -32,6 +32,9 @@ import com.example.data.remote.CashPayApiService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Request
 
 class CashPayRepository(
     private val apiService: CashPayApiService,
@@ -1584,13 +1587,13 @@ class CashPayRepository(
         }
     }
 
-    suspend fun createBoutique(name: String, address: String, whatsappNumber: String): Result<com.example.data.model.BoutiqueResponse> {
+    suspend fun createBoutique(name: String, address: String? = null, whatsappNumber: String? = null): Result<com.example.data.model.BoutiqueResponse> {
         return try {
             ensureSessionToken()
             val req = com.example.data.model.CreateBoutiqueRequest(
                 name = name,
-                address = address,
-                whatsappPublicNumber = whatsappNumber
+                address = if (address.isNullOrBlank()) null else address,
+                whatsappPublicNumber = if (whatsappNumber.isNullOrBlank()) null else whatsappNumber
             )
             val response = apiService.createBoutique(req)
             if (response.isSuccessful && response.body() != null) {
@@ -1619,13 +1622,13 @@ class CashPayRepository(
         }
     }
 
-    suspend fun updateBoutique(boutiqueId: String, name: String, address: String, whatsappNumber: String): Result<com.example.data.model.BoutiqueResponse> {
+    suspend fun updateBoutique(boutiqueId: String, name: String, address: String? = null, whatsappNumber: String? = null): Result<com.example.data.model.BoutiqueResponse> {
         return try {
             ensureSessionToken()
             val req = com.example.data.model.CreateBoutiqueRequest(
                 name = name,
-                address = address,
-                whatsappPublicNumber = whatsappNumber
+                address = if (address.isNullOrBlank()) null else address,
+                whatsappPublicNumber = if (whatsappNumber.isNullOrBlank()) null else whatsappNumber
             )
             val response = apiService.updateBoutique(boutiqueId, req)
             if (response.isSuccessful && response.body() != null) {
@@ -1647,6 +1650,20 @@ class CashPayRepository(
                 Result.success(response.body()!!)
             } else {
                 val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de supprimer la boutique.")
+                Result.failure(Exception(msg))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPublicUserProducts(userId: String, storeId: String? = null): Result<com.example.data.model.PublicCatalogResponse> {
+        return try {
+            val response = apiService.getPublicUserProducts(userId, storeId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val msg = extractErrorMessage(response.errorBody()?.string(), "Catalogue public introuvable.")
                 Result.failure(Exception(msg))
             }
         } catch (e: Exception) {
@@ -1746,85 +1763,172 @@ class CashPayRepository(
         }
     }
 
-    // --- RATES / EXCHANGE RATES API ---
+    // --- RATES / EXCHANGE RATES API (Temps Réel depuis la Base de Données) ---
     suspend fun getExchangeRates(countryCode: String? = null): Result<com.example.data.model.ExchangeRatesResponse> {
-        return try {
-            ensureSessionToken()
-            val cCode = countryCode?.uppercase()?.trim() ?: "CD"
-            val response = apiService.getExchangeRates(cCode)
-            if (response.isSuccessful && response.body() != null && response.body()!!.success) {
-                Result.success(response.body()!!)
-            } else {
-                // Compute real market crossed exchange rates dynamically for user's country
-                val isCfa = listOf("SN", "CI", "CM", "ML", "BF", "BJ", "NE", "TG", "GA", "CG", "TD", "CF", "GQ").contains(cCode)
-                val natCode = if (isCfa) "XOF" else if (cCode == "CD" || cCode == "243") "CDF" else "CDF"
-                val usdToNat = if (isCfa) 612.0 else 2850.0
-                val eurToNat = if (isCfa) 655.957 else 3105.0
-                val eurToUsd = 1.085
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val cCode = countryCode?.uppercase()?.trim() ?: "CD"
 
-                val ratesMap = mapOf(
-                    "USD_${natCode}" to usdToNat,
-                    "${natCode}_USD" to (1.0 / usdToNat),
-                    "EUR_${natCode}" to eurToNat,
-                    "${natCode}_EUR" to (1.0 / eurToNat),
-                    "EUR_USD" to eurToUsd,
-                    "USD_EUR" to (1.0 / eurToUsd),
-                    "USD_USD" to 1.0,
-                    "EUR_EUR" to 1.0,
-                    "${natCode}_${natCode}" to 1.0
-                )
+                // 1. Détection temps réel directement depuis la base de données via Next.js Server Action
+                val liveActionRates = fetchRatesViaServerAction(cCode)
+                if (liveActionRates != null && !liveActionRates.rates.isNullOrEmpty()) {
+                    return@withContext Result.success(liveActionRates)
+                }
+
+                // 2. Appel de l'API REST si le serveur expose l'endpoint
+                try {
+                    val response = apiService.getExchangeRates(cCode)
+                    if (response.isSuccessful && response.body() != null && response.body()!!.success && !response.body()!!.rates.isNullOrEmpty()) {
+                        return@withContext Result.success(response.body()!!)
+                    }
+                } catch (_: Exception) {}
+
+                // Aucun taux inventé ou codé en dur : on retourne la structure avec les taux réels disponibles ou vide
                 Result.success(
                     com.example.data.model.ExchangeRatesResponse(
                         success = true,
                         countryCode = cCode,
-                        nationalCurrency = natCode,
-                        rates = ratesMap
+                        rates = emptyMap()
                     )
                 )
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-        } catch (e: Exception) {
-            val cCode = countryCode?.uppercase()?.trim() ?: "CD"
-            val isCfa = listOf("SN", "CI", "CM", "ML", "BF", "BJ", "NE", "TG", "GA", "CG", "TD", "CF", "GQ").contains(cCode)
-            val natCode = if (isCfa) "XOF" else if (cCode == "CD" || cCode == "243") "CDF" else "CDF"
-            val usdToNat = if (isCfa) 612.0 else 2850.0
-            val eurToNat = if (isCfa) 655.957 else 3105.0
-            val eurToUsd = 1.085
-            val ratesMap = mapOf(
-                "USD_${natCode}" to usdToNat,
-                "${natCode}_USD" to (1.0 / usdToNat),
-                "EUR_${natCode}" to eurToNat,
-                "${natCode}_EUR" to (1.0 / eurToNat),
-                "EUR_USD" to eurToUsd,
-                "USD_EUR" to (1.0 / eurToUsd),
-                "USD_USD" to 1.0,
-                "EUR_EUR" to 1.0,
-                "${natCode}_${natCode}" to 1.0
-            )
-            Result.success(
+        }
+    }
+
+    private fun fetchRatesViaServerAction(countryCode: String): com.example.data.model.ExchangeRatesResponse? {
+        return try {
+            val requestBody = "[]".toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("https://app.cashpay-all.com/exchange")
+                .header("Next-Action", "8fe3dd5a7a3b30ef3f0a1b2e0f5914277339742b")
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/x-component, application/json")
+                .post(requestBody)
+                .build()
+
+            val response = com.example.data.remote.ApiClient.okHttpClient.newCall(request).execute()
+            val raw = response.body?.string() ?: return null
+            val line1 = raw.lines().find { it.startsWith("1:") }?.substringAfter("1:")
+                ?: raw.substringAfter("1:").takeIf { it.isNotBlank() }
+                ?: return null
+
+            val parsedJson = org.json.JSONTokener(line1).nextValue()
+            val ratesMap = mutableMapOf<String, Double>()
+
+            if (parsedJson is org.json.JSONArray) {
+                for (i in 0 until parsedJson.length()) {
+                    val item = parsedJson.optJSONObject(i) ?: continue
+                    val from = item.optString("from_currency").ifBlank { item.optString("from") }.uppercase()
+                    val to = item.optString("to_currency").ifBlank { item.optString("to") }.uppercase()
+                    val rate = item.optDouble("rate", 0.0)
+                    if (from.isNotBlank() && to.isNotBlank() && rate > 0.0) {
+                        ratesMap["${from}_${to}"] = rate
+                        if (!ratesMap.containsKey("${to}_${from}")) {
+                            ratesMap["${to}_${from}"] = 1.0 / rate
+                        }
+                    }
+                }
+            } else if (parsedJson is JSONObject) {
+                val innerRates = if (parsedJson.has("rates")) parsedJson.optJSONObject("rates") else parsedJson
+                innerRates?.let { obj ->
+                    val keys = obj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        ratesMap[key.uppercase()] = obj.optDouble(key, 0.0)
+                    }
+                }
+            }
+
+            if (ratesMap.isNotEmpty()) {
                 com.example.data.model.ExchangeRatesResponse(
                     success = true,
-                    countryCode = cCode,
-                    nationalCurrency = natCode,
+                    countryCode = countryCode,
                     rates = ratesMap
                 )
-            )
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun getRealtimeQuote(amount: Double, fromCurrency: String, toCurrency: String): Result<com.example.data.model.RealtimeQuoteDto> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val from = fromCurrency.uppercase().trim()
+                val to = toCurrency.uppercase().trim()
+                if (from == to) {
+                    return@withContext Result.success(
+                        com.example.data.model.RealtimeQuoteDto(
+                            fromAmount = amount,
+                            fromCurrency = from,
+                            toAmount = amount,
+                            toCurrency = to,
+                            rate = 1.0,
+                            quoteId = "same-currency"
+                        )
+                    )
+                }
+
+                val requestBody = "[$amount,\"$from\",\"$to\"]".toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("https://app.cashpay-all.com/exchange")
+                    .header("Next-Action", "8ec9edd95f43bb8c254e071f124725b502bc381b")
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "text/x-component, application/json")
+                    .post(requestBody)
+                    .build()
+
+                val response = com.example.data.remote.ApiClient.okHttpClient.newCall(request).execute()
+                val raw = response.body?.string() ?: ""
+                val line1 = raw.lines().find { it.startsWith("1:") }?.substringAfter("1:")
+                    ?: raw.substringAfter("1:").takeIf { it.isNotBlank() }
+                    ?: raw
+
+                val jsonObject = JSONObject(line1)
+                if (jsonObject.optBoolean("success", false) && jsonObject.has("quote")) {
+                    val q = jsonObject.getJSONObject("quote")
+                    val quoteDto = com.example.data.model.RealtimeQuoteDto(
+                        fromAmount = q.optDouble("fromAmount", amount),
+                        fromCurrency = q.optString("fromCurrency", from),
+                        toAmount = q.optDouble("toAmount", 0.0),
+                        toCurrency = q.optString("toCurrency", to),
+                        rate = q.optDouble("rate", 0.0),
+                        quoteId = q.optString("quoteId", "")
+                    )
+                    Result.success(quoteDto)
+                } else {
+                    val err = jsonObject.optString("error", "Taux indisponible pour cette paire dans la base de données.")
+                    Result.failure(Exception(err))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 
     // --- AGENT CUSTOMER ONBOARDING ---
     suspend fun getAgentCustomerOptions(): Result<com.example.data.model.AgentCustomerOptionsResponse> {
-        return try {
-            ensureSessionToken()
-            val response = apiService.getAgentCustomerOptions()
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                Result.success(body)
-            } else {
-                val msg = extractErrorMessage(response.errorBody()?.string(), "Impossible de charger les options d'inscription Agent.")
-                Result.failure(Exception(msg))
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val response = apiService.getAgentCustomerOptions()
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    Result.success(body)
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val msg = extractErrorMessage(errorBody, "Impossible de charger les options et le pays de l'Agent depuis l'API (${response.code()}).")
+                    Result.failure(Exception(msg))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -1864,6 +1968,77 @@ class CashPayRepository(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // --- INTERNATIONAL TRANSFER CLAIMS (Section Client) ---
+    suspend fun createInternationalClaim(request: com.example.data.model.CreateClaimRequest): Result<com.example.data.model.CreateClaimResponse> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val response = apiService.createInternationalClaim(request)
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else if (response.code() == 409) {
+                    // Conflict duplicate claim
+                    val errString = response.errorBody()?.string()
+                    val parsedResponse = try {
+                        if (!errString.isNullOrBlank()) {
+                            val moshi = com.squareup.moshi.Moshi.Builder()
+                                .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+                                .build()
+                            moshi.adapter(com.example.data.model.CreateClaimResponse::class.java).fromJson(errString)
+                        } else null
+                    } catch (_: Exception) { null }
+                    if (parsedResponse != null) {
+                        Result.success(parsedResponse)
+                    } else {
+                        Result.failure(Exception("Cette réclamation existe déjà."))
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val parsedMsg = extractErrorMessage(errorBody, "Erreur (${response.code()}): impossible de soumettre la réclamation")
+                    Result.failure(Exception(parsedMsg))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getInternationalClaims(): Result<com.example.data.model.ClaimsListResponse> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val response = apiService.getInternationalClaims()
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val parsedMsg = extractErrorMessage(errorBody, "Impossible de charger les réclamations.")
+                    Result.failure(Exception(parsedMsg))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getInternationalClaimDetail(id: Long): Result<com.example.data.model.ClaimDetailResponse> {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                ensureSessionToken()
+                val response = apiService.getInternationalClaimDetail(id)
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val parsedMsg = extractErrorMessage(errorBody, "Détail de réclamation introuvable.")
+                    Result.failure(Exception(parsedMsg))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 }

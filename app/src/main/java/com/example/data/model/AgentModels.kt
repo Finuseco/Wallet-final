@@ -196,6 +196,16 @@ data class AgentOperationRecord(
 
 // --- AGENT CUSTOMER REGISTRATION (OPTIONS, REGISTER, LIST) ---
 
+fun Any?.asOptionString(): String {
+    if (this == null) return ""
+    if (this is String) return this
+    if (this is Map<*, *>) {
+        val v = this["key"] ?: this["code"] ?: this["id"] ?: this["name"] ?: this["label"] ?: this["value"]
+        return v?.toString() ?: ""
+    }
+    return this.toString()
+}
+
 @JsonClass(generateAdapter = true)
 data class AgentCountryOptionDto(
     @Json(name = "code") val code: String? = null,
@@ -212,13 +222,13 @@ data class AgentProvinceOptionDto(
 
 @JsonClass(generateAdapter = true)
 data class AgentCustomerOptionsMap(
-    @Json(name = "account_type") val accountType: List<String>? = emptyList(),
-    @Json(name = "gender") val gender: List<String>? = emptyList(),
-    @Json(name = "marital_status") val maritalStatus: List<String>? = emptyList(),
-    @Json(name = "language") val language: List<String>? = emptyList(),
-    @Json(name = "ussd_language") val ussdLanguage: List<String>? = emptyList(),
-    @Json(name = "id_type") val idType: List<String>? = emptyList(),
-    @Json(name = "representative_relation") val representativeRelation: List<String>? = emptyList()
+    @Json(name = "account_type") val accountType: List<Any>? = emptyList(),
+    @Json(name = "gender") val gender: List<Any>? = emptyList(),
+    @Json(name = "marital_status") val maritalStatus: List<Any>? = emptyList(),
+    @Json(name = "language") val language: List<Any>? = emptyList(),
+    @Json(name = "ussd_language") val ussdLanguage: List<Any>? = emptyList(),
+    @Json(name = "id_type") val idType: List<Any>? = emptyList(),
+    @Json(name = "representative_relation") val representativeRelation: List<Any>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

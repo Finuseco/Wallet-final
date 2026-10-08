@@ -71,6 +71,9 @@ fun ExchangeDialog(
     isOpen: Boolean,
     walletResponse: WalletResponse?,
     exchangeRatesMap: Map<String, Double> = emptyMap(),
+    realtimeQuoteRate: Double? = null,
+    realtimeQuoteAmount: Double? = null,
+    isQuoteLoading: Boolean = false,
     fromCurrency: String,
     toCurrency: String,
     amount: String,
@@ -83,6 +86,7 @@ fun ExchangeDialog(
     onSwapCurrencies: () -> Unit,
     onAmountChange: (String) -> Unit,
     onPinChange: (String) -> Unit,
+    onRefreshRates: () -> Unit = {},
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
     onResetSuccess: () -> Unit
@@ -111,16 +115,8 @@ fun ExchangeDialog(
         }
     }
 
-    // Dynamic exchange rate estimation from server API rates
-    val hasServerRate = remember(fromCurrency, toCurrency, exchangeRatesMap) {
-        val from = fromCurrency.uppercase()
-        val to = toCurrency.uppercase()
-        val pairKey = "${from}_${to}"
-        val reversePairKey = "${to}_${from}"
-        from == to || exchangeRatesMap.containsKey(pairKey) || (exchangeRatesMap.containsKey(reversePairKey) && (exchangeRatesMap[reversePairKey] ?: 0.0) > 0.0)
-    }
-
-    val indicativeRate = remember(fromCurrency, toCurrency, exchangeRatesMap, nationalCode) {
+    // Dynamic exchange rate detection in real-time directly from database (NO HARDCODED VALUES)
+    val liveRate = remember(fromCurrency, toCurrency, exchangeRatesMap, realtimeQuoteRate) {
         val from = fromCurrency.uppercase()
         val to = toCurrency.uppercase()
         val pairKey = "${from}_${to}"
@@ -129,26 +125,27 @@ fun ExchangeDialog(
             null
         } else if (from == to) {
             1.0
-        } else if (exchangeRatesMap.containsKey(pairKey)) {
-            exchangeRatesMap[pairKey] ?: 1.0
+        } else if (realtimeQuoteRate != null && realtimeQuoteRate > 0.0) {
+            realtimeQuoteRate
+        } else if (exchangeRatesMap.containsKey(pairKey) && (exchangeRatesMap[pairKey] ?: 0.0) > 0.0) {
+            exchangeRatesMap[pairKey]!!
         } else if (exchangeRatesMap.containsKey(reversePairKey) && (exchangeRatesMap[reversePairKey] ?: 0.0) > 0.0) {
             1.0 / (exchangeRatesMap[reversePairKey]!!)
         } else {
-            // Dynamic market cross rates based on country currency
-            when {
-                from == "USD" && to == nationalCode -> if (nationalCode == "CDF") 2850.0 else 612.0
-                from == nationalCode && to == "USD" -> if (nationalCode == "CDF") (1.0 / 2850.0) else (1.0 / 612.0)
-                from == "EUR" && to == "USD" -> 1.085
-                from == "USD" && to == "EUR" -> (1.0 / 1.085)
-                from == "EUR" && to == nationalCode -> if (nationalCode == "CDF") 3105.0 else 655.957
-                from == nationalCode && to == "EUR" -> if (nationalCode == "CDF") (1.0 / 3105.0) else (1.0 / 655.957)
-                else -> 1.0
-            }
+            null
         }
     }
 
     val parsedAmount = amount.toDoubleOrNull() ?: 0.0
-    val estimatedToAmount = if (indicativeRate != null) parsedAmount * indicativeRate else 0.0
+    val estimatedToAmount = remember(parsedAmount, liveRate, realtimeQuoteAmount) {
+        if (realtimeQuoteAmount != null && realtimeQuoteAmount > 0.0) {
+            realtimeQuoteAmount
+        } else if (liveRate != null) {
+            parsedAmount * liveRate
+        } else {
+            0.0
+        }
+    }
 
     if (showInfoDialog) {
         AlertDialog(
@@ -598,30 +595,75 @@ fun ExchangeDialog(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Indicative Exchange Rate Estimation Card
+                    // Real-Time Exchange Rate Card directly from Database
                     Surface(
                         color = Color(0xFF1E293B),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (indicativeRate != null) Color(0xFF00E676).copy(alpha = 0.3f) else Color(0xFFF59E0B).copy(alpha = 0.4f)),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (liveRate != null) Color(0xFF00E676).copy(alpha = 0.4f) else Color(0xFFF59E0B).copy(alpha = 0.4f)
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Taux configuré serveur :", fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
-                                Text(
-                                    if (indicativeRate != null) "1 $fromCurrency = ${formatRate(indicativeRate)} $toCurrency" else "Non disponible (BTC)",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (indicativeRate != null) Color(0xFF00E676) else Color(0xFFF59E0B),
-                                    fontFamily = MulishFontFamily
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(if (liveRate != null) Color(0xFF00E676) else Color(0xFFF59E0B))
+                                    )
+                                    Text(
+                                        "Taux en temps réel (Base de données) :",
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFF94A3B8),
+                                        fontFamily = MulishFontFamily
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (isQuoteLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Color(0xFF00E676)
+                                        )
+                                    } else {
+                                        Text(
+                                            if (liveRate != null) "1 $fromCurrency = ${formatRate(liveRate)} $toCurrency" else "En cours de détection...",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (liveRate != null) Color(0xFF00E676) else Color(0xFFF59E0B),
+                                            fontFamily = MulishFontFamily
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = onRefreshRates,
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SwapVert,
+                                            contentDescription = "Actualiser le taux",
+                                            tint = Color(0xFF00E676),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -629,7 +671,9 @@ fun ExchangeDialog(
                                 Text("Frais de change :", fontSize = 12.sp, color = Color(0xFF94A3B8), fontFamily = MulishFontFamily)
                                 Text("0 $fromCurrency (Gratuit ✔)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981), fontFamily = MulishFontFamily)
                             }
+
                             Spacer(modifier = Modifier.height(2.dp))
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -637,10 +681,10 @@ fun ExchangeDialog(
                             ) {
                                 Text("Montant estimé à recevoir :", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = MulishFontFamily)
                                 Text(
-                                    if (indicativeRate != null) "${formatAmount(estimatedToAmount)} $toCurrency" else "Non disponible",
+                                    if (liveRate != null) "${formatAmount(estimatedToAmount)} $toCurrency" else if (isQuoteLoading) "Calcul..." else "En attente du montant",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = if (indicativeRate != null) Color(0xFF06B6D4) else Color(0xFF94A3B8),
+                                    color = if (liveRate != null) Color(0xFF06B6D4) else Color(0xFF94A3B8),
                                     fontFamily = MulishFontFamily
                                 )
                             }

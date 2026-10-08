@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Store
+import androidx.compose.material.icons.filled.AddBusiness
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Check
@@ -145,7 +148,8 @@ fun AgentServicesDialog(
     onSubmitLoanRepay: () -> Unit,
     onResetLoanRepay: () -> Unit,
     onOpenRegisterCustomer: () -> Unit = {},
-    onOpenCustomerList: () -> Unit = {}
+    onOpenCustomerList: () -> Unit = {},
+    onOpenShopping: (Int) -> Unit = {}
 ) {
     if (!isOpen) return
 
@@ -326,6 +330,36 @@ fun AgentServicesDialog(
                                 icon = Icons.Default.Person,
                                 modifier = Modifier.weight(1.5f),
                                 onClick = onOpenCustomerList
+                            )
+                        }
+
+                        // Ligne 4: Shopping Agent & Boutiques (V1 Shopping API)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ToofanActionSquare(
+                                title = "Mes Boutiques\nShopping",
+                                bgColor = Color(0xFFFF6600),
+                                icon = Icons.Default.Store,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onOpenShopping(0) }
+                            )
+
+                            ToofanActionSquare(
+                                title = "Publier un\nProduit",
+                                bgColor = Color(0xFF0284C7),
+                                icon = Icons.Default.AddBusiness,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onOpenShopping(2) }
+                            )
+
+                            ToofanActionSquare(
+                                title = "Catalogue\nPublic",
+                                bgColor = Color(0xFF8B5CF6),
+                                icon = Icons.Default.ShoppingBag,
+                                modifier = Modifier.weight(1f),
+                                onClick = { onOpenShopping(3) }
                             )
                         }
                     }

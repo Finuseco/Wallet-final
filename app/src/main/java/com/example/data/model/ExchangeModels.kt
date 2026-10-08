@@ -45,3 +45,27 @@ data class ExchangeRatesResponse(
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class RealtimeQuoteDto(
+    @Json(name = "fromAmount") val fromAmount: Double? = null,
+    @Json(name = "fromCurrency") val fromCurrency: String? = null,
+    @Json(name = "toAmount") val toAmount: Double? = null,
+    @Json(name = "toCurrency") val toCurrency: String? = null,
+    @Json(name = "rate") val rate: Double? = null,
+    @Json(name = "quoteId") val quoteId: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class RealtimeQuoteResponse(
+    @Json(name = "success") val success: Boolean = true,
+    @Json(name = "quote") val quote: RealtimeQuoteDto? = null,
+    @Json(name = "error") val error: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ServerActionRateDbItem(
+    @Json(name = "from_currency") val fromCurrency: String? = null,
+    @Json(name = "to_currency") val toCurrency: String? = null,
+    @Json(name = "rate") val rate: Double? = null
+)
