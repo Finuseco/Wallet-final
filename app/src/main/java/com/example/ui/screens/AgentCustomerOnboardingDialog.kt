@@ -3,6 +3,9 @@ package com.example.ui.screens
 import android.graphics.Bitmap
 import android.util.Base64
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -86,11 +89,13 @@ fun AgentCustomerOnboardingDialog(
     var middleName by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("male") }
     var maritalStatus by remember { mutableStateOf("single") }
-    var birthDate by remember { mutableStateOf("2000-01-01") }
     var birthPlace by remember { mutableStateOf("Kinshasa") }
     var nationality by remember { mutableStateOf("Congolaise") }
     var profession by remember { mutableStateOf("Commerçant") }
     var incomePerMonth by remember { mutableStateOf("300") }
+    var birthDateMillis by remember { mutableStateOf<Long?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE) }
 
     // --- Étape 2 : Contact & Résidence ---
     var rawPhone by remember { mutableStateOf("") }
@@ -103,8 +108,6 @@ fun AgentCustomerOnboardingDialog(
     // --- Étape 3 : Pièce d'Identité & Entreprise ---
     var idType by remember { mutableStateOf("national_id") }
     var idNumber by remember { mutableStateOf("") }
-    var idIssuedDate by remember { mutableStateOf("") }
-    var idExpiryDate by remember { mutableStateOf("") }
     var businessName by remember { mutableStateOf("") }
     var activityDescription by remember { mutableStateOf("") }
 
@@ -491,7 +494,40 @@ fun AgentCustomerOnboardingDialog(
                                     }
                                 }
 
-                                FormInputField("Date de naissance (AAAA-MM-JJ) *", birthDate, { birthDate = it }, "2000-01-01")
+                                 // Date de naissance
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Date de naissance *", color = Color(0xFFCBD5E1), fontSize = 12.5.sp, fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = birthDateMillis?.let { dateFormatter.format(Date(it)) } ?: "",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        placeholder = { Text("Choisir une date", color = Color(0xFF64748B), fontSize = 13.5.sp, fontFamily = MulishFontFamily) },
+                                        leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null, tint = Color(0xFF00E676)) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showDatePicker = true },
+                                        enabled = false,
+                                        colors = clientTextFieldColors(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                }
+                                
+                                if (showDatePicker) {
+                                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = birthDateMillis)
+                                    DatePickerDialog(
+                                        onDismissRequest = { showDatePicker = false },
+                                        confirmButton = {
+                                            TextButton(onClick = {
+                                                birthDateMillis = datePickerState.selectedDateMillis
+                                                showDatePicker = false
+                                            }) { Text("OK") }
+                                        },
+                                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Annuler") } }
+                                    ) {
+                                        DatePicker(state = datePickerState)
+                                    }
+                                }
+                                
                                 FormInputField("Lieu de naissance *", birthPlace, { birthPlace = it }, "Kinshasa")
                                 FormInputField("Nationalité *", nationality, { nationality = it }, "Congolaise")
                                 FormInputField("Profession *", profession, { profession = it }, "Commerçant")
@@ -499,7 +535,7 @@ fun AgentCustomerOnboardingDialog(
 
                                 NavigationButtonBar(
                                     nextLabel = "Suivant : Contact & Résidence",
-                                    nextEnabled = firstName.isNotBlank() && lastName.isNotBlank() && birthDate.isNotBlank() && birthPlace.isNotBlank(),
+                                    nextEnabled = firstName.isNotBlank() && lastName.isNotBlank() && birthDateMillis != null && birthPlace.isNotBlank(),
                                     onNext = { currentStep = 2 }
                                 )
                             }
@@ -702,8 +738,6 @@ fun AgentCustomerOnboardingDialog(
                                 }
 
                                 FormInputField("Numéro de la pièce *", idNumber, { idNumber = it }, "Ex: ID-98472918")
-                                FormInputField("Date d'émission (Optionnel)", idIssuedDate, { idIssuedDate = it }, "2023-01-15")
-                                FormInputField("Date d'expiration (Optionnel)", idExpiryDate, { idExpiryDate = it }, "2028-01-15")
 
                                 if (selectedAccountType.equals("business", ignoreCase = true)) {
                                     FormInputField("Nom Entreprise / Commercial *", businessName, { businessName = it }, "Ex: Éts Mukendi & Frères", leadingIcon = Icons.Default.Business)
@@ -869,7 +903,7 @@ fun AgentCustomerOnboardingDialog(
                                             }
 
                                             val req = AgentRegisterCustomerRequest(
-                                                accountType = selectedAccountType,
+                                                accountType = selectedAccountType.lowercase(),
                                                 firstName = firstName.trim(),
                                                 lastName = lastName.trim(),
                                                 middleName = middleName.trim().ifBlank { null },
@@ -879,16 +913,16 @@ fun AgentCustomerOnboardingDialog(
                                                 country = countryCode,
                                                 countryCode = countryCode,
                                                 email = email.trim().ifBlank { null },
-                                                gender = gender,
-                                                maritalStatus = maritalStatus,
-                                                birthDate = birthDate.trim().ifBlank { null },
+                                                gender = gender.lowercase(),
+                                                maritalStatus = maritalStatus.lowercase(),
+                                                birthDate = birthDateMillis?.let { dateFormatter.format(Date(it)) },
                                                 birthPlace = birthPlace.trim().ifBlank { null },
                                                 city = city.trim().ifBlank { null },
                                                 address = address.trim().ifBlank { null },
                                                 idType = idType,
                                                 idNumber = idNumber.trim().ifBlank { null },
-                                                idIssuedDate = idIssuedDate.trim().ifBlank { null },
-                                                idExpiryDate = idExpiryDate.trim().ifBlank { null },
+                                                idIssuedDate = null,
+                                                idExpiryDate = null,
                                                 profession = profession.trim().ifBlank { null },
                                                 nationality = nationality.trim().ifBlank { null },
                                                 incomePerMonth = incomePerMonth.toDoubleOrNull(),
