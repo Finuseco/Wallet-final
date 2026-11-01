@@ -34,6 +34,7 @@ fun LoansDialog(
     viewModel: DashboardViewModel,
     onDismiss: () -> Unit
 ) {
+    LoanConfirmationDialog(uiState,viewModel)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -218,7 +219,7 @@ fun SubTabLoanOffer(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            RecapRow("Intérêt configuré :", "${offer.interestRate ?: 0.0}%")
+                            RecapRow("Intérêt configuré :", "${offer.interestRates[uiState.loanRequestDuration.toString()] ?: offer.interestRate ?: 0.0}%")
                             RecapRow("Taux de garantie :", "${(offer.guaranteeRate ?: 0.0) * 100}%")
                             RecapRow("Solde maximum disponible :", "${String.format("%.2f", offer.balance)} ${offer.currency}")
                         }
@@ -304,7 +305,7 @@ fun SubTabLoanOffer(
 
                         ToofanButton(
                             title = "Soumettre la demande",
-                            onClick = { viewModel.submitLoanRequest() },
+                            onClick = { viewModel.reviewLoanRequest() },
                             isLoading = uiState.isRequestingLoan,
                             enabled = uiState.loanRequestAmount.toDoubleOrNull() != null && uiState.loanRequestAmount.toDouble() > 0
                         )
@@ -445,7 +446,7 @@ fun SubTabActiveLoan(
                             }
                             ToofanButton(
                                 title = "Payer",
-                                onClick = { viewModel.submitLoanRepayment(loan.id) },
+                                onClick = { viewModel.reviewLoanRepayment(loan.id) },
                                 isLoading = uiState.isRepayingLoan,
                                 enabled = !uiState.isRepayingLoan && !uiState.isRepayInstallmentLoading && (uiState.loanRepayAmount.toDoubleOrNull()?.let { it.isFinite() && it > 0 && it <= loan.remainingBalance } == true),
                                 modifier = Modifier.width(90.dp)
@@ -539,7 +540,7 @@ fun SubTabActiveLoan(
                                         color = ToofanMainDark
                                     )
                                     Text(
-                                        text = "Date limite: ${inst.dueDate ?: "-"}",
+                                        text = "Date limite: ${inst.dueDate ?: "-"}\nDéjà payé : ${inst.paidAmount} ${loan.currency} · pénalités incluses : ${inst.penalty} ${loan.currency}",
                                         fontSize = 10.sp,
                                         color = ToFocusBorderColor
                                     )
@@ -565,7 +566,7 @@ fun SubTabActiveLoan(
                                     if (!isPaid && inst.remainingAmount > 0) {
                                         ToofanButton(
                                             title = "Rembourser",
-                                            onClick = { viewModel.submitInstallmentRepayment(loan.id, inst.id) },
+                                            onClick = { viewModel.reviewLoanRepayment(loan.id, inst.id) },
                                             isLoading = uiState.isRepayInstallmentLoading,
                                             modifier = Modifier
                                                 .height(28.dp)

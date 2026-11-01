@@ -51,7 +51,8 @@ data class LoanOfferDto(
     @Json(name = "guaranteeRate") val guaranteeRate: Double? = 0.0,
     @Json(name = "balance") val balance: Double = 0.0,
     @Json(name = "currency") val currency: String = "USD",
-    @Json(name = "durations") val durations: List<Int> = emptyList()
+    @Json(name = "durations") val durations: List<Int> = emptyList(),
+    @Json(name="interestRates") val interestRates: Map<String,Double> = emptyMap()
 )
 
 @JsonClass(generateAdapter = true)
@@ -84,7 +85,9 @@ data class LoanRequest(
     @Json(name = "currency") val currency: String,
     @Json(name = "durationMonths") val durationMonths: Int,
     @Json(name = "repaymentFrequency") val repaymentFrequency: String = "monthly",
-    @Json(name = "installmentCount") val installmentCount: Int
+    @Json(name = "installmentCount") val installmentCount: Int,
+    @Json(name="acceptTerms") val acceptTerms: Boolean = true,
+    @Json(name="acceptedTerms") val acceptedTerms: LoanApplicationQuote? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -98,11 +101,15 @@ data class LoanRequestResponse(
 @JsonClass(generateAdapter = true)
 data class LoanRepayRequest(
     @Json(name = "loanId") val loanId: Long,
-    @Json(name = "amount") val amount: Double
+    @Json(name = "amount") val amount: Double,
+    @Json(name="acceptedPayment") val acceptedPayment: LoanPaymentQuote? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class LoanRepayResponse(
+    @Json(name="currency") val currency:String?=null,
+    @Json(name="fee") val fee:Double?=null,
+    @Json(name="reference") val reference:String?=null,
     @Json(name = "paid") val paid: Double? = null,
     @Json(name = "success") val success: Boolean = false,
     @Json(name = "debtBefore") val debtBefore: Double? = null,
@@ -115,11 +122,17 @@ data class LoanRepayResponse(
 @JsonClass(generateAdapter = true)
 data class LoanRepayInstallmentRequest(
     @Json(name = "loanId") val loanId: Long,
-    @Json(name = "installmentId") val installmentId: Long
+    @Json(name = "installmentId") val installmentId: Long,
+    @Json(name="acceptedPayment") val acceptedPayment: LoanPaymentQuote? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class LoanRepayInstallmentResponse(
+    @Json(name="paid") val paid:Double?=null,
+    @Json(name="remaining") val remaining:Double?=null,
+    @Json(name="currency") val currency:String?=null,
+    @Json(name="fee") val fee:Double?=null,
+    @Json(name="reference") val reference:String?=null,
     @Json(name = "success") val success: Boolean = false,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null
@@ -172,3 +185,12 @@ data class AgentRepaymentResponse(
     @Json(name = "reference") val reference: String? = null,
     @Json(name = "error") val error: String? = null
 )
+
+@JsonClass(generateAdapter=true)
+data class LoanApplicationQuote(val principal:Double,val interestRate:Double,val totalRepayment:Double,val repaymentFrequency:String,val installmentCount:Int,val installmentAmount:Double,val lastInstallmentAmount:Double,val guaranteeAmount:Double,val currency:String,val durationMonths:Int,val penaltyIntervalDays:Int,val penaltyExample:Double)
+@JsonClass(generateAdapter=true)
+data class LoanApplicationQuoteResponse(val success:Boolean,val quote:LoanApplicationQuote?=null,val error:String?=null)
+@JsonClass(generateAdapter=true)
+data class LoanPaymentQuote(val loanId:Long,val installmentId:Long?=null,val amount:Double,val currency:String,val fee:Double,val totalDebit:Double,val remaining:Double,val quoteToken:String?=null)
+@JsonClass(generateAdapter=true)
+data class LoanPaymentQuoteResponse(val success:Boolean,val quote:LoanPaymentQuote?=null,val error:String?=null)

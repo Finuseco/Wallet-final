@@ -54,18 +54,11 @@ object QrCodeGenerator {
     /**
      * Decodes a QR code from a Bitmap if scanned or imported.
      */
-    fun decodeQrBitmap(bitmap: Bitmap): String? {
-        return try {
-            val width = bitmap.width
-            val height = bitmap.height
-            val pixels = IntArray(width * height)
-            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            val source = com.google.zxing.RGBLuminanceSource(width, height, pixels)
-            val binaryBitmap = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
-            val result = com.google.zxing.MultiFormatReader().decode(binaryBitmap)
-            result.text
-        } catch (e: Exception) {
-            null
-        }
+    fun decodeQrBitmap(bitmap: Bitmap): String? = decodeBarcodeBitmap(bitmap)?.text
+    fun decodeBarcodeBitmap(bitmap: Bitmap): com.google.zxing.Result? {
+        val width=bitmap.width;val height=bitmap.height
+        val pixels=IntArray(width*height);bitmap.getPixels(pixels,0,width,0,0,width,height)
+        val luma=ByteArray(pixels.size){i->val color=pixels[i];(((color shr 16 and 255)*306+(color shr 8 and 255)*601+(color and 255)*117) shr 10).toByte()}
+        return BarcodeDecoder.decodeResult(luma,width,height)
     }
 }

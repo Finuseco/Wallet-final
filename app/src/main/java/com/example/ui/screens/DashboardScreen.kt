@@ -173,6 +173,7 @@ fun DashboardScreen(
     var showSettingsModal by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showQrScannerDialog by remember { mutableStateOf(false) }
+    var commerceScan by remember { mutableStateOf<String?>(null) }
     var qrScanTarget by remember { mutableStateOf("transfer") } // "transfer", "agent_deposit", "agent_withdraw", "agent_loan"
     var selectedContactForProfile by remember { mutableStateOf<com.example.data.model.PhoneContact?>(null) }
 
@@ -689,14 +690,18 @@ fun DashboardScreen(
         )
     }
 
+    commerceScan?.let { raw -> ScanPurchaseDialog(raw,dashboardViewModel){commerceScan=null} }
     // Live Camera QR Scanner Dialog with instant automatic search
     if (showQrScannerDialog) {
         QrScannerDialog(
+            onBarcodeScanned = if(qrScanTarget=="transfer") { raw -> commerceScan=org.json.JSONObject().put("type","BARCODE").put("barcode",raw).toString();showQrScannerDialog=false } else null,
             onDismissRequest = { 
                 showQrScannerDialog = false 
                 qrScanTarget = "transfer"
             },
             onQrScanned = { result ->
+                val commerce = try { org.json.JSONObject(result).optString("type") in listOf("PRODUCT","POS_SALE","PAYMENT_REQUEST") } catch(_:Exception) { false }
+                if(qrScanTarget=="transfer" && commerce){commerceScan=result;showQrScannerDialog=false;return@QrScannerDialog}
                 val cleaned = extractRecipientFromQr(result)
                 when (qrScanTarget) {
                     "agent_withdraw" -> {

@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,11 +78,18 @@ fun QrScannerDialog(
     onDismissRequest: () -> Unit,
     onQrScanned: (result: String) -> Unit,
     title: String = "Scanner un QR Code CashPay / Crypto",
-    prefillTarget: String? = null
+    prefillTarget: String? = null,
+    onBarcodeScanned: ((String)->Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = LocalClipboardManager.current
+    val executor=remember { Executors.newSingleThreadExecutor() }
+    val detected=remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    DisposableEffect(Unit){onDispose{detected.set(true);provider?.unbindAll();executor.shutdownNow()}}
+
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -98,26 +106,31 @@ fun QrScannerDialog(
         hasCameraPermission = isGranted
     }
 
+    var scannedAsProduct by remember { mutableStateOf(false) }
+    var scanError by remember { mutableStateOf<String?>(null) }
     var scannedResult by remember { mutableStateOf<String?>(null) }
     var manualInput by remember { mutableStateOf(prefillTarget ?: "") }
     var isFlashlightOn by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFlashlightOn,camera){camera?.cameraControl?.enableTorch(isFlashlightOn)}
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
             try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
-                if (bitmap != null) {
-                    val decoded = QrCodeGenerator.decodeQrBitmap(bitmap)
-                    if (decoded != null) {
-                        scannedResult = decoded
-                    }
-                }
+                detected.set(true);scannedResult=null;scannedAsProduct=false
+                val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+                context.contentResolver.openInputStream(it)?.use{stream->BitmapFactory.decodeStream(stream,null,bounds)}
+                val options=BitmapFactory.Options().apply{inSampleSize=1};while(bounds.outWidth/options.inSampleSize>2048||bounds.outHeight/options.inSampleSize>2048)options.inSampleSize*=2
+                val bitmap=context.contentResolver.openInputStream(it)?.use{stream->BitmapFactory.decodeStream(stream,null,options)}
+                val decoded=bitmap?.let{image->QrCodeGenerator.decodeBarcodeBitmap(image)}
+                bitmap?.recycle()
+                if(decoded!=null){scannedResult=decoded.text;scannedAsProduct=decoded.barcodeFormat !in listOf(com.google.zxing.BarcodeFormat.QR_CODE,com.google.zxing.BarcodeFormat.DATA_MATRIX);detected.set(true);scanError=null}
+                else {detected.set(false);scanError="Aucun code lisible dans cette image. Essayez une photo nette du code."}
+
             } catch (e: Exception) {
-                e.printStackTrace()
+                detected.set(false);scanError="Image impossible à lire."
             }
         }
     }
@@ -196,7 +209,9 @@ fun QrScannerDialog(
                                 val previewView = PreviewView(ctx)
                                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                                 cameraProviderFuture.addListener({
+                                    if(executor.isShutdown)return@addListener
                                     val cameraProvider = cameraProviderFuture.get()
+                                    provider=cameraProvider
                                     val preview = Preview.Builder().build().also {
                                         it.setSurfaceProvider(previewView.surfaceProvider)
                                     }
@@ -206,68 +221,34 @@ fun QrScannerDialog(
                                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                         .build()
 
-                                    // Real camera analyzer using ZXing with correct rowStride & hints
-                                    val reader = com.google.zxing.MultiFormatReader().apply {
-                                        setHints(
-                                            mapOf(
-                                                com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to listOf(
-                                                    com.google.zxing.BarcodeFormat.QR_CODE,
-                                                    com.google.zxing.BarcodeFormat.DATA_MATRIX
-                                                ),
-                                                com.google.zxing.DecodeHintType.TRY_HARDER to true
-                                            )
-                                        )
-                                    }
-
-                                    imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+                                    imageAnalysis.setAnalyzer(executor) { imageProxy ->
                                         try {
-                                            if (scannedResult == null) {
-                                                val plane = imageProxy.planes[0]
-                                                val buffer = plane.buffer
-                                                val data = ByteArray(buffer.remaining())
-                                                buffer.get(data)
-                                                val rowStride = plane.rowStride
-                                                val width = imageProxy.width
-                                                val height = imageProxy.height
-
-                                                val source = com.google.zxing.PlanarYUVLuminanceSource(
-                                                    data, rowStride, height, 0, 0, width, height, false
-                                                )
-                                                val binaryBitmap = com.google.zxing.BinaryBitmap(
-                                                    com.google.zxing.common.HybridBinarizer(source)
-                                                )
-                                                val result = try {
-                                                    reader.decodeWithState(binaryBitmap)
-                                                } catch (_: Exception) {
-                                                    null
-                                                } finally {
-                                                    reader.reset()
-                                                }
-
-                                                if (result != null && scannedResult == null) {
-                                                    val text = result.text
-                                                    scannedResult = text
-                                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                                        onQrScanned(text)
-                                                        onDismissRequest()
+                                            if(!detected.get()){
+                                                val plane=imageProxy.planes[0]
+                                                val buffer=plane.buffer.duplicate();val data=ByteArray(buffer.remaining());buffer.get(data)
+                                                val width=imageProxy.width;val height=imageProxy.height
+                                                val pixels=ByteArray(width*height)
+                                                if((height-1)*plane.rowStride+(width-1)*plane.pixelStride<data.size){
+                                                    for(y in 0 until height)for(x in 0 until width)pixels[y*width+x]=data[y*plane.rowStride+x*plane.pixelStride]
+                                                    val decoded=com.example.util.BarcodeDecoder.decodeResult(pixels,width,height)
+                                                    if(decoded!=null&&detected.compareAndSet(false,true))android.os.Handler(android.os.Looper.getMainLooper()).post{
+                                                        if(!executor.isShutdown){val text=decoded!!.text;scannedResult=text;if(decoded.barcodeFormat !in listOf(com.google.zxing.BarcodeFormat.QR_CODE,com.google.zxing.BarcodeFormat.DATA_MATRIX)&&onBarcodeScanned!=null)onBarcodeScanned(text) else onQrScanned(text);onDismissRequest()}
                                                     }
                                                 }
                                             }
-                                        } catch (_: Exception) {
-                                        } finally {
-                                            imageProxy.close()
-                                        }
+                                        }catch(_:Exception){}finally{imageProxy.close()}
                                     }
 
                                     try {
                                         cameraProvider.unbindAll()
-                                        val camera = cameraProvider.bindToLifecycle(
+                                        val boundCamera = cameraProvider.bindToLifecycle(
                                             lifecycleOwner,
                                             cameraSelector,
                                             preview,
                                             imageAnalysis
                                         )
-                                        camera.cameraControl.enableTorch(isFlashlightOn)
+                                        camera=boundCamera
+                                        boundCamera.cameraControl.enableTorch(isFlashlightOn)
                                     } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
@@ -315,6 +296,7 @@ fun QrScannerDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
+                scanError?.let{Text(it,color=Color(0xFFFF8888))}
                 // Scanned outcome or manual input
                 if (scannedResult != null) {
                     val resultText = scannedResult ?: ""
@@ -356,7 +338,7 @@ fun QrScannerDialog(
                                 }
                                 Button(
                                     onClick = {
-                                        onQrScanned(resultText)
+                                        if(scannedAsProduct&&onBarcodeScanned!=null)onBarcodeScanned(resultText) else onQrScanned(resultText)
                                         onDismissRequest()
                                     },
                                     modifier = Modifier.weight(1f),

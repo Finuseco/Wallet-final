@@ -1247,7 +1247,36 @@ main = it.main.copy(
     }
 
     // --- LOANS MODULE ACTIONS ---
+    private val _loanConfirmation=kotlinx.coroutines.flow.MutableStateFlow(com.example.ui.screens.LoanConfirmationState())
+    val loanConfirmation=_loanConfirmation.asStateFlow()
+    private var loanReviewVersion=0
+    fun closeLoanConfirmation(){loanReviewVersion++;_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState()}
+    fun reviewLoanRequest(){
+        val state=_uiState.value;val amount=state.loanRequestAmount.toDoubleOrNull()
+        if(amount==null||!amount.isFinite()||amount<=0){updateLoans{copy(loanRequestError="Montant invalide.")};return}
+        val version=++loanReviewVersion;_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(loading=true)
+        updateLoans{copy(loanRequestError=null,loanRepayError=null,repayInstallmentError=null)}
+        viewModelScope.launch{repository.loanApplicationQuote(state.loanCurrency,amount,state.loanRequestDuration).onSuccess{if(version==loanReviewVersion)_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(application=it)}.onFailure{if(version==loanReviewVersion)_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(error=it.message)}}
+    }
+    fun reviewLoanRepayment(loanId:Long,installmentId:Long?=null){
+        val version=++loanReviewVersion;_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(loading=true)
+        updateLoans{copy(loanRequestError=null,loanRepayError=null,repayInstallmentError=null)}
+        val amount=if(installmentId==null)_uiState.value.loanRepayAmount.toDoubleOrNull() else null
+        viewModelScope.launch{repository.loanPaymentQuote(loanId,amount,installmentId).onSuccess{if(version==loanReviewVersion)_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(payment=it)}.onFailure{if(version==loanReviewVersion)_loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(error=it.message)}}
+    }
+    fun confirmReviewedLoan(){
+        val state=_uiState.value;if(state.isRequestingLoan||state.isRepayingLoan||state.isRepayInstallmentLoading)return
+        val review=_loanConfirmation.value
+        review.application?.let{submitLoanRequest(acceptedTerms=it);return}
+        review.payment?.let{if(it.installmentId==null)submitLoanRepayment(it.loanId,acceptedPayment=it) else submitInstallmentRepayment(it.loanId,it.installmentId,acceptedPayment=it)}
+    }
+
+    suspend fun resolveCommerceScan(request:com.example.data.model.ScanRequest)=repository.resolveScan(request)
+    suspend fun payCommerceScan(token:String,pin:String)=repository.payScan(token,pin)
+    fun refreshAfterCommercePayment(){fetchWallet();loadTransactions()}
+
     fun openLoansDialog() {
+        closeLoanConfirmation()
         updateLoans { copy(isLoansDialogOpen = true,
                 loanSelectedTab = 0,
                 loanRequestAmount = "",
@@ -1265,6 +1294,7 @@ main = it.main.copy(
     }
 
     fun closeLoansDialog() {
+        closeLoanConfirmation()
         updateLoans { copy(isLoansDialogOpen = false) }
     }
 
@@ -1350,7 +1380,7 @@ main = it.main.copy(
         }
     }
 
-    fun submitLoanRequest(userId: Long? = null) {
+    fun submitLoanRequest(userId: Long? = null,acceptedTerms:com.example.data.model.LoanApplicationQuote?=null) {
         val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         if(state.isRequestingLoan)return
@@ -1371,13 +1401,16 @@ main = it.main.copy(
                 currency = offer.currency,
                 durationMonths = state.loanRequestDuration,
                 repaymentFrequency = if(state.loanRequestDuration==1) "weekly" else if(state.loanRequestDuration==3) "monthly" else "quarterly",
-                installmentCount = if(state.loanRequestDuration==1) 4 else if(state.loanRequestDuration==3) 3 else state.loanRequestDuration/3
+                installmentCount = if(state.loanRequestDuration==1) 4 else if(state.loanRequestDuration==3) 3 else state.loanRequestDuration/3,
+                acceptedTerms=acceptedTerms
             ).onSuccess { resp ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onSuccess
                 if (resp.success) {
                     updateLoans { copy(isRequestingLoan = false,
                             loanRequestSuccess = true,
                             loanRequestAmount = "",
                             loanRequestError = null) }
+                    _loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(receipt="Demande enregistrée. Le crédit sera versé uniquement après approbation.")
                     fetchActiveLoan()
                     fetchLoanHistory()
                     fetchWallet(effectiveUserId) // update wallet balance
@@ -1386,17 +1419,18 @@ main = it.main.copy(
                             loanRequestError = resp.error ?: "Erreur lors de la demande.") }
                 }
             }.onFailure { err ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onFailure
                 updateLoans { copy(isRequestingLoan = false,
                         loanRequestError = err.message ?: "Erreur réseau.") }
             }
         }
     }
 
-    fun submitLoanRepayment(loanId: Long, userId: Long? = null) {
+    fun submitLoanRepayment(loanId: Long, userId: Long? = null,acceptedPayment:com.example.data.model.LoanPaymentQuote?=null) {
         if(_uiState.value.isRepayingLoan || _uiState.value.isRepayInstallmentLoading)return
         val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
-        val amount = state.loanRepayAmount.toDoubleOrNull() ?: 0.0
+        val amount = acceptedPayment?.amount ?: state.loanRepayAmount.toDoubleOrNull() ?: 0.0
         if (!amount.isFinite() || amount <= 0.0) {
             updateLoans { copy(loanRepayError = "Le montant doit être supérieur à zéro.") }
             return
@@ -1404,13 +1438,15 @@ main = it.main.copy(
 
         updateLoans { copy(isRepayingLoan = true, loanRepayError = null, loanRepaySuccess = false) }
         viewModelScope.launch {
-            repository.repayLoan(loanId, amount)
+            repository.repayLoan(loanId, amount,acceptedPayment)
                 .onSuccess { resp ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onSuccess
                     if (resp.success) {
                         updateLoans { copy(isRepayingLoan = false,
                                 loanRepaySuccess = true,
                                 loanRepayAmount = "",
                                 loanRepayError = null) }
+                        _loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(receipt="Remboursement confirmé : ${resp.paid} ${resp.currency}. Frais : ${resp.fee}. Dette restante : ${resp.debtAfter}. Référence : ${resp.reference}.")
                         fetchActiveLoan()
                         fetchLoanHistory()
                         fetchWallet(effectiveUserId)
@@ -1420,23 +1456,26 @@ main = it.main.copy(
                     }
                 }
                 .onFailure { err ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onFailure
                     updateLoans { copy(isRepayingLoan = false,
                             loanRepayError = err.message ?: "Erreur réseau.") }
                 }
         }
     }
 
-    fun submitInstallmentRepayment(loanId: Long, installmentId: Long, userId: Long? = null) {
+    fun submitInstallmentRepayment(loanId: Long, installmentId: Long, userId: Long? = null,acceptedPayment:com.example.data.model.LoanPaymentQuote?=null) {
         if(_uiState.value.isRepayingLoan || _uiState.value.isRepayInstallmentLoading)return
         val effectiveUserId = getEffectiveUserId(userId)
         updateLoans { copy(isRepayInstallmentLoading = true, repayInstallmentError = null, loanInstallmentSuccess = false) }
         viewModelScope.launch {
-            repository.repayLoanInstallment(loanId, installmentId)
+            repository.repayLoanInstallment(loanId, installmentId,acceptedPayment)
                 .onSuccess { resp ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onSuccess
                     if (resp.success) {
                         updateLoans { copy(isRepayInstallmentLoading = false,
                                 loanInstallmentSuccess = true,
                                 repayInstallmentError = null) }
+                        _loanConfirmation.value=com.example.ui.screens.LoanConfirmationState(receipt="Échéance remboursée : ${resp.paid} ${resp.currency}. Frais : ${resp.fee}. Dette restante : ${resp.remaining}. Référence : ${resp.reference}.")
                         fetchActiveLoan()
                         fetchLoanHistory()
                         fetchWallet(effectiveUserId)
@@ -1446,6 +1485,7 @@ main = it.main.copy(
                     }
                 }
                 .onFailure { err ->
+                    if(getEffectiveUserId()!=effectiveUserId)return@onFailure
                     updateLoans { copy(isRepayInstallmentLoading = false,
                             repayInstallmentError = err.message ?: "Erreur réseau.") }
                 }
