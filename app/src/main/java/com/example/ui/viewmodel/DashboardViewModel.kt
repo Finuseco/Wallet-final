@@ -1287,15 +1287,23 @@ main = it.main.copy(
         updateLoans { copy(loanRepayAmount = amount, loanRepayError = null) }
     }
 
+    fun setLoanCurrency(currency: String) {
+        if(currency !in listOf("USD","EUR","CDF") || _uiState.value.isRequestingLoan)return
+        updateLoans { copy(loanCurrency=currency,loanOffer=null,loanOfferError=null) }
+        fetchLoanOffer()
+    }
+
     fun fetchLoanOffer() {
-        val currency = _uiState.value.withdrawalCurrency // standard currency
+        val currency = _uiState.value.loanCurrency
         updateLoans { copy(isLoadingLoanOffer = true, loanOfferError = null) }
         viewModelScope.launch {
             repository.getLoanOffer(currency)
                 .onSuccess { resp ->
+                    if(_uiState.value.loanCurrency!=currency)return@onSuccess
                     if (resp.success && resp.offer != null) {
                         updateLoans { copy(isLoadingLoanOffer = false,
                                 loanOffer = resp.offer,
+                                loanRequestDuration = if(resp.offer.durations.contains(loanRequestDuration)) loanRequestDuration else resp.offer.durations.firstOrNull() ?: 3,
                                 loanOfferError = null) }
                     } else {
                         updateLoans { copy(isLoadingLoanOffer = false,
@@ -1303,6 +1311,7 @@ main = it.main.copy(
                     }
                 }
                 .onFailure { err ->
+                    if(_uiState.value.loanCurrency!=currency)return@onFailure
                     updateLoans { copy(isLoadingLoanOffer = false,
                             loanOfferError = err.message ?: "Erreur réseau.") }
                 }
@@ -1316,7 +1325,7 @@ main = it.main.copy(
                 .onSuccess { resp ->
                     updateLoans { copy(isLoadingActiveLoan = false,
                             activeLoan = if (resp.success) resp.loan else null,
-                            activeLoanError = null) }
+                            activeLoanError = if(resp.success) null else resp.error ?: "Chargement du crédit non confirmé.") }
                 }
                 .onFailure { err ->
                     updateLoans { copy(isLoadingActiveLoan = false,
@@ -1332,7 +1341,7 @@ main = it.main.copy(
                 .onSuccess { resp ->
                     updateLoans { copy(isLoadingLoanHistory = false,
                             loanHistory = if (resp.success) resp.loans else emptyList(),
-                            loanHistoryError = null) }
+                            loanHistoryError = if(resp.success) null else resp.error ?: "Historique indisponible.") }
                 }
                 .onFailure { err ->
                     updateLoans { copy(isLoadingLoanHistory = false,
@@ -1344,8 +1353,13 @@ main = it.main.copy(
     fun submitLoanRequest(userId: Long? = null) {
         val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
+        if(state.isRequestingLoan)return
+        val offer=state.loanOffer
+        if(offer==null || !offer.eligible || state.loanRequestDuration !in offer.durations){
+            updateLoans { copy(loanRequestError="Chargez une offre valide et choisissez une durée proposée.") };return
+        }
         val amount = state.loanRequestAmount.toDoubleOrNull() ?: 0.0
-        if (amount <= 0.0) {
+        if (!amount.isFinite() || amount <= 0.0) {
             updateLoans { copy(loanRequestError = "Le montant doit être supérieur à zéro.") }
             return
         }
@@ -1354,10 +1368,10 @@ main = it.main.copy(
         viewModelScope.launch {
             repository.requestLoan(
                 amount = amount,
-                currency = "USD", // default
+                currency = offer.currency,
                 durationMonths = state.loanRequestDuration,
-                repaymentFrequency = "monthly",
-                installmentCount = state.loanRequestDuration
+                repaymentFrequency = if(state.loanRequestDuration==1) "weekly" else if(state.loanRequestDuration==3) "monthly" else "quarterly",
+                installmentCount = if(state.loanRequestDuration==1) 4 else if(state.loanRequestDuration==3) 3 else state.loanRequestDuration/3
             ).onSuccess { resp ->
                 if (resp.success) {
                     updateLoans { copy(isRequestingLoan = false,
@@ -1379,10 +1393,11 @@ main = it.main.copy(
     }
 
     fun submitLoanRepayment(loanId: Long, userId: Long? = null) {
+        if(_uiState.value.isRepayingLoan || _uiState.value.isRepayInstallmentLoading)return
         val effectiveUserId = getEffectiveUserId(userId)
         val state = _uiState.value
         val amount = state.loanRepayAmount.toDoubleOrNull() ?: 0.0
-        if (amount <= 0.0) {
+        if (!amount.isFinite() || amount <= 0.0) {
             updateLoans { copy(loanRepayError = "Le montant doit être supérieur à zéro.") }
             return
         }
@@ -1412,6 +1427,7 @@ main = it.main.copy(
     }
 
     fun submitInstallmentRepayment(loanId: Long, installmentId: Long, userId: Long? = null) {
+        if(_uiState.value.isRepayingLoan || _uiState.value.isRepayInstallmentLoading)return
         val effectiveUserId = getEffectiveUserId(userId)
         updateLoans { copy(isRepayInstallmentLoading = true, repayInstallmentError = null, loanInstallmentSuccess = false) }
         viewModelScope.launch {

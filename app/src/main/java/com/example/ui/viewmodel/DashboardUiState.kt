@@ -125,6 +125,7 @@ data class WithdrawalUiState(
 )
 
 data class LoansUiState(
+    val loanCurrency: String = "USD",
     val isLoansDialogOpen: Boolean = false,
     val isLoadingLoanOffer: Boolean = false,
     val loanOffer: LoanOfferDto? = null,
@@ -438,6 +439,7 @@ data class DashboardUiState(
     // --- LOANS IMMUTABLE FIELDS ---
     val isLoansDialogOpen: Boolean = loans.isLoansDialogOpen
     val isLoadingLoanOffer: Boolean = loans.isLoadingLoanOffer
+    val loanCurrency: String = loans.loanCurrency
     val loanOffer: LoanOfferDto? = loans.loanOffer
     val loanOfferError: String? = loans.loanOfferError
     val activeLoan: LoanDto? = loans.activeLoan

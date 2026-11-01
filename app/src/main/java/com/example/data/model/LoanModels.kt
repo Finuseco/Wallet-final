@@ -5,17 +5,17 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class LoanDto(
-    @Json(name = "id") val id: Long = 0L,
-    @Json(name = "amount") val amount: Double = 0.0,
+    @Json(name = "id") val id: Long,
+    @Json(name = "amount") val amount: Double,
     @Json(name = "initialAmount") val initialAmount: Double = 0.0,
-    @Json(name = "principalAmount") val principalAmount: Double? = null,
-    @Json(name = "totalRepayment") val totalRepayment: Double? = null,
-    @Json(name = "repaidAmount") val repaidAmount: Double = 0.0,
-    @Json(name = "remainingBalance") val remainingBalance: Double = 0.0,
+    @Json(name = "principal_amount") val principalAmount: Double? = null,
+    @Json(name = "total_repayment") val totalRepayment: Double? = null,
+    @Json(name = "repaid_amount") val repaidAmount: Double = 0.0,
+    @Json(name = "remaining_balance") val remainingBalance: Double,
     @Json(name = "currency") val currency: String = "USD",
-    @Json(name = "status") val status: String? = "APPROVED",
-    @Json(name = "startDate") val startDate: String? = null,
-    @Json(name = "endDate") val endDate: String? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "start_date") val startDate: String? = null,
+    @Json(name = "end_date") val endDate: String? = null,
     @Json(name = "isFinished") val isFinished: Boolean = false,
     @Json(name = "schedule") val schedule: List<LoanInstallmentDto> = emptyList(),
     @Json(name = "installments") val installments: List<LoanInstallmentDto> = emptyList(),
@@ -25,28 +25,33 @@ data class LoanDto(
 @JsonClass(generateAdapter = true)
 data class LoanInstallmentDto(
     @Json(name = "id") val id: Long = 0L,
-    @Json(name = "number") val number: Int = 1,
+    @Json(name = "installment_number") val number: Int = 1,
     @Json(name = "amount") val amount: Double = 0.0,
     @Json(name = "status") val status: String? = "PENDING",
-    @Json(name = "dueDate") val dueDate: String? = null
+    @Json(name = "due_date") val dueDate: String? = null,
+    @Json(name = "penalty") val penalty: Double = 0.0,
+    @Json(name = "paid_amount") val paidAmount: Double = 0.0,
+    @Json(name = "remaining_amount") val remainingAmount: Double = 0.0
 )
 
 @JsonClass(generateAdapter = true)
 data class LoanRepaymentDto(
     @Json(name = "id") val id: Long = 0L,
     @Json(name = "amount") val amount: Double = 0.0,
-    @Json(name = "date") val date: String? = null
+    @Json(name = "payment_date") val date: String? = null,
+    @Json(name = "type") val type: String = "repayment",
+    @Json(name = "debt_remaining") val debtRemaining: Double? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class LoanOfferDto(
-    @Json(name = "eligible") val eligible: Boolean = true,
+    @Json(name = "eligible") val eligible: Boolean = false,
     @Json(name = "reason") val reason: String? = null,
     @Json(name = "interestRate") val interestRate: Double? = 0.0,
     @Json(name = "guaranteeRate") val guaranteeRate: Double? = 0.0,
     @Json(name = "balance") val balance: Double = 0.0,
     @Json(name = "currency") val currency: String = "USD",
-    @Json(name = "durations") val durations: List<Int> = listOf(1, 3, 6, 12)
+    @Json(name = "durations") val durations: List<Int> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -98,9 +103,10 @@ data class LoanRepayRequest(
 
 @JsonClass(generateAdapter = true)
 data class LoanRepayResponse(
+    @Json(name = "paid") val paid: Double? = null,
     @Json(name = "success") val success: Boolean = false,
     @Json(name = "debtBefore") val debtBefore: Double? = null,
-    @Json(name = "debtAfter") val debtAfter: Double? = null,
+    @Json(name = "remaining") val debtAfter: Double? = null,
     @Json(name = "remainingBalance") val remainingBalance: Double? = null,
     @Json(name = "message") val message: String? = null,
     @Json(name = "error") val error: String? = null

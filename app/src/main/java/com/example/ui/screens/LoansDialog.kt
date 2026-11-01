@@ -118,6 +118,11 @@ fun SubTabLoanOffer(
     uiState: DashboardUiState,
     viewModel: DashboardViewModel
 ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("USD","EUR","CDF").forEach { currency ->
+            FilterChip(selected=uiState.loanCurrency==currency,onClick={viewModel.setLoanCurrency(currency)},label={Text(currency)},enabled=!uiState.isRequestingLoan)
+        }
+    }
     if (uiState.isLoadingLoanOffer) {
         Box(
             modifier = Modifier
@@ -442,7 +447,7 @@ fun SubTabActiveLoan(
                                 title = "Payer",
                                 onClick = { viewModel.submitLoanRepayment(loan.id) },
                                 isLoading = uiState.isRepayingLoan,
-                                enabled = uiState.loanRepayAmount.toDoubleOrNull() != null && uiState.loanRepayAmount.toDouble() > 0,
+                                enabled = !uiState.isRepayingLoan && !uiState.isRepayInstallmentLoading && (uiState.loanRepayAmount.toDoubleOrNull()?.let { it.isFinite() && it > 0 && it <= loan.remainingBalance } == true),
                                 modifier = Modifier.width(90.dp)
                             )
                         }
@@ -484,7 +489,7 @@ fun SubTabActiveLoan(
                                         }
                                     }
                                     Column {
-                                        Text(text = "Remboursement", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ToofanMainDark)
+                                        Text(text = if(rep.type=="penalty") "Pénalité" else "Remboursement", fontFamily = MulishFontFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ToofanMainDark)
                                         Text(text = rep.date ?: "-", fontSize = 10.sp, color = ToofanBodyText)
                                     }
                                 }
@@ -527,7 +532,7 @@ fun SubTabActiveLoan(
                             ) {
                                 Column {
                                     Text(
-                                        text = "Échéance #${inst.number} — ${String.format("%.2f", inst.amount)} ${loan.currency}",
+                                        text = "Échéance #${inst.number} — reste ${String.format("%.2f", inst.remainingAmount)} ${loan.currency}",
                                         fontFamily = MulishFontFamily,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
@@ -557,7 +562,7 @@ fun SubTabActiveLoan(
                                         )
                                     }
 
-                                    if (!isPaid) {
+                                    if (!isPaid && inst.remainingAmount > 0) {
                                         ToofanButton(
                                             title = "Rembourser",
                                             onClick = { viewModel.submitInstallmentRepayment(loan.id, inst.id) },
